@@ -1,0 +1,346 @@
+'use client';
+
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { infrastructureStatus } from '@/data/dummyData';
+import {
+  Ambulance,
+  Wind,
+  Wrench,
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  Edit,
+  Calendar,
+  MapPin,
+  RefreshCw,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+
+const statusColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
+  operational: {
+    bg: 'bg-green-50',
+    text: 'text-green-700',
+    icon: <CheckCircle className="h-4 w-4" />,
+  },
+  maintenance: {
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    icon: <Wrench className="h-4 w-4" />,
+  },
+  'out-of-service': {
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    icon: <XCircle className="h-4 w-4" />,
+  },
+};
+
+const conditionColors: Record<string, string> = {
+  good: 'bg-green-100 text-green-700',
+  fair: 'bg-amber-100 text-amber-700',
+  poor: 'bg-orange-100 text-orange-700',
+  critical: 'bg-red-100 text-red-700',
+};
+
+export default function InfrastructureStatus() {
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Infrastructure Status</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Monitor and update hospital equipment and infrastructure
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+          <Button onClick={() => setShowUpdateDialog(true)}>
+            <Edit className="h-4 w-4 mr-2" />
+            Update Status
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Ventilators */}
+        <Card className="border-l-4 border-l-cyan-500">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">Ventilators</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">
+                  {infrastructureStatus.ventilators.available}/{infrastructureStatus.ventilators.total}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-cyan-50">
+                <Wind className="h-6 w-6 text-cyan-600" />
+              </div>
+            </div>
+            <div className="mt-3 space-y-1">
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>In Use: {infrastructureStatus.ventilators.inUse}</span>
+                <span>Maintenance: {infrastructureStatus.ventilators.maintenance}</span>
+              </div>
+              <Progress
+                value={(infrastructureStatus.ventilators.inUse / infrastructureStatus.ventilators.total) * 100}
+                className="h-2"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Ambulances */}
+        <Card className="border-l-4 border-l-orange-500">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">Ambulances</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">
+                  {infrastructureStatus.ambulances.available}/{infrastructureStatus.ambulances.total}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-orange-50">
+                <Ambulance className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+            <div className="mt-3 space-y-1">
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>On Duty: {infrastructureStatus.ambulances.onDuty}</span>
+                <span>Maintenance: {infrastructureStatus.ambulances.maintenance}</span>
+              </div>
+              <Progress
+                value={(infrastructureStatus.ambulances.onDuty / infrastructureStatus.ambulances.total) * 100}
+                className="h-2"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Operational Equipment */}
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">Operational</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">
+                  {infrastructureStatus.criticalEquipment.filter(e => e.status === 'operational').length}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-green-50">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-3">
+              Equipment fully functional
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Maintenance */}
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">Under Maintenance</p>
+                <p className="text-3xl font-bold text-amber-600 mt-1">
+                  {infrastructureStatus.criticalEquipment.filter(e => e.status === 'maintenance').length}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-amber-50">
+                <Wrench className="h-6 w-6 text-amber-600" />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-3">
+              Equipment being serviced
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Equipment Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Critical Equipment Status</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead className="font-semibold">Equipment</TableHead>
+                <TableHead className="font-semibold">Category</TableHead>
+                <TableHead className="font-semibold">Location</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Condition</TableHead>
+                <TableHead className="font-semibold">Last Serviced</TableHead>
+                <TableHead className="font-semibold">Next Service</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {infrastructureStatus.criticalEquipment.map((equipment) => (
+                <TableRow key={equipment.id} className="hover:bg-slate-50">
+                  <TableCell className="font-medium">{equipment.name}</TableCell>
+                  <TableCell>{equipment.category}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1 text-sm text-slate-600">
+                      <MapPin className="h-3 w-3" />
+                      {equipment.location}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'flex items-center gap-1 w-fit capitalize',
+                        statusColors[equipment.status].bg,
+                        statusColors[equipment.status].text
+                      )}
+                    >
+                      {statusColors[equipment.status].icon}
+                      {equipment.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={cn('capitalize', conditionColors[equipment.condition])}
+                    >
+                      {equipment.condition}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1 text-sm">
+                      <Calendar className="h-3 w-3 text-slate-400" />
+                      {format(equipment.lastServiced, 'MMM dd, yyyy')}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1 text-sm">
+                      <Calendar className="h-3 w-3 text-slate-400" />
+                      {format(equipment.nextServiceDue, 'MMM dd, yyyy')}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Last Updated */}
+      <div className="text-center text-sm text-slate-500">
+        Last updated: {format(infrastructureStatus.lastUpdated, 'MMM dd, yyyy h:mm a')}
+      </div>
+
+      {/* Update Dialog */}
+      <Dialog open={showUpdateDialog} onOpenChange={setShowUpdateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Equipment Status</DialogTitle>
+            <DialogDescription>
+              Update the status of hospital equipment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Equipment</Label>
+              <Select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select equipment" />
+                </SelectTrigger>
+                <SelectContent>
+                  {infrastructureStatus.criticalEquipment.map((eq) => (
+                    <SelectItem key={eq.id} value={eq.id}>
+                      {eq.name} - {eq.location}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="operational">Operational</SelectItem>
+                  <SelectItem value="maintenance">Under Maintenance</SelectItem>
+                  <SelectItem value="out-of-service">Out of Service</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Condition</Label>
+              <Select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select condition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="good">Good</SelectItem>
+                  <SelectItem value="fair">Fair</SelectItem>
+                  <SelectItem value="poor">Poor</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Available Ventilators</Label>
+                <Input type="number" placeholder="Enter count" />
+              </div>
+              <div className="space-y-2">
+                <Label>Available Ambulances</Label>
+                <Input type="number" placeholder="Enter count" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUpdateDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => setShowUpdateDialog(false)}>
+              Update
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

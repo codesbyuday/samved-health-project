@@ -1,0 +1,51 @@
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "SMC Hospital Portal - Solapur Municipal Corporation",
+  description: "Smart Public Health Management System for Solapur Municipal Corporation. Manage patients, appointments, infrastructure, disease reporting, and hospital analytics.",
+  keywords: ["Hospital Management", "Healthcare", "Solapur", "Government Hospital", "Public Health", "SMC", "Medical Portal"],
+  authors: [{ name: "Solapur Municipal Corporation" }],
+  icons: {
+    icon: "/logo.svg",
+  },
+  openGraph: {
+    title: "SMC Hospital Portal",
+    description: "Smart Public Health Management System",
+    url: "https://smc.solapur.gov.in",
+    siteName: "SMC Hospital Portal",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+      >
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}

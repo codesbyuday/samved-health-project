@@ -1,0 +1,750 @@
+FUNCTIONS:
+1. For the disease_id :
+CREATE SEQUENCE disease_id_seq START 1;
+CREATE OR REPLACE FUNCTION generate_disease_id()
+RETURNS TEXT AS $$
+BEGIN
+  RETURN 'DIS' || LPAD(nextval('disease_id_seq')::TEXT, 5, '0');
+END;
+$$ LANGUAGE plpgsql;
+
+2. For Citizen ID:
+
+CREATE SEQUENCE citizen_seq START 1;
+CREATE OR REPLACE FUNCTION generate_citizen_id()
+RETURNS TEXT AS $$
+DECLARE
+    seq INT;
+BEGIN
+    seq := nextval('citizen_seq');
+
+    RETURN 'SMC-' || EXTRACT(YEAR FROM NOW()) || '-' ||
+           LPAD(seq::TEXT,6,'0');
+END;
+$$ LANGUAGE plpgsql;
+
+3. For Appointment ID:
+CREATE OR REPLACE FUNCTION generate_appointment_id()
+RETURNS TEXT AS $$
+BEGIN
+RETURN 'APP' ||
+TO_CHAR(NOW(),'DDMMHH24MISSMS');
+END;
+$$ LANGUAGE plpgsql;
+
+4. For Health Index ID
+CREATE SEQUENCE health_index_seq START 1;
+CREATE OR REPLACE FUNCTION generate_index_id()
+RETURNS TEXT AS $$
+DECLARE
+seq INT;
+BEGIN
+seq := nextval('health_index_seq');
+RETURN 'IDX' || seq;
+END;
+$$ LANGUAGE plpgsql;
+
+5. For Complaint ID:
+CREATE OR REPLACE FUNCTION generate_complaint_id()
+RETURNS TEXT AS $$
+BEGIN
+RETURN 'COMP' ||
+TO_CHAR(NOW(),'DDMMHH24MISSMS');
+END;
+$$ LANGUAGE plpgsql;
+
+6. For Test_Type_ID:
+CREATE SEQUENCE test_type_seq START 1;
+
+
+-----ENUMS DETAILS-------
+CREATE TYPE user_role_enum AS ENUM (
+'citizen',
+'hospital_staff',
+'smc_official',
+'provider'
+);
+
+CREATE TYPE equipment_condition_status_enum AS ENUM (
+'operational',
+'needs_service',
+'under_maintenance',
+'out_of_order',
+'retired'
+);
+
+CREATE TYPE risk_level_enum AS ENUM (
+'low',
+'moderate',
+'high',
+'critical'
+);
+
+CREATE TYPE complaint_priority_enum AS ENUM (
+'low',
+'medium',
+'high',
+'critical'
+);
+
+CREATE TYPE gender_enum AS ENUM (
+'Male',
+'Female',
+'Transgender'
+);
+
+CREATE TYPE provider_type_enum AS ENUM (
+'pharmacy',
+'lab'
+);
+
+CREATE TYPE staff_status_enum AS ENUM (
+'active',
+'inactive',
+'suspended'
+);
+
+CREATE TYPE bed_type_enum AS ENUM (
+'general',
+'icu',
+'isolation',
+'pediatric',
+'maternity',
+'emergency'
+);
+
+CREATE TYPE bed_status_enum AS ENUM (
+'available',
+'occupied',
+'reserved',
+'cleaning',
+'maintenance',
+'blocked'
+);
+
+CREATE TYPE appointment_type_enum AS ENUM (
+'in_person',
+'telemedicine',
+'emergency'
+);
+
+CREATE TYPE appointment_status_enum AS ENUM (
+'booked',
+'confirmed',
+'cancelled',
+'completed',
+'not_attended',
+'rescheduled'
+);
+
+CREATE TYPE telemedicine_type_enum AS ENUM (
+'video',
+'audio',
+'chat'
+);
+
+CREATE TYPE telemedicine_status_enum AS ENUM (
+'scheduled',
+'ongoing',
+'completed',
+'cancelled',
+'missed'
+);
+
+CREATE TYPE referral_urgency_enum AS ENUM (
+'normal',
+'urgent',
+'emergency'
+);
+
+CREATE TYPE referral_status_enum AS ENUM (
+'pending',
+'accepted',
+'rejected',
+'completed'
+);
+
+CREATE TYPE disease_category_enum AS ENUM (
+'communicable',
+'non_communicable'
+);
+
+CREATE TYPE disease_severity_enum AS ENUM (
+'mild',
+'moderate',
+'severe',
+'critical'
+);
+
+CREATE TYPE disease_case_status_enum AS ENUM (
+'active',
+'recovered',
+'deceased',
+'under_treatment'
+);
+
+CREATE TYPE vaccination_campaign_status_enum AS ENUM (
+'scheduled',
+'ongoing',
+'completed',
+'cancelled'
+);
+
+CREATE TYPE diagnostic_report_status_enum AS ENUM (
+'pending',
+'in_progress',
+'completed',
+'cancelled',
+'failed'
+);
+
+CREATE TYPE complaint_status_enum AS ENUM (
+'submitted',
+'under_review',
+'in_progress',
+'resolved',
+'closed'
+);
+
+CREATE TYPE notification_type_enum AS ENUM (
+'appointment',
+'lab_report',
+'complaint_update',
+'health_alert',
+'vaccination_campaign',
+'system',
+'emergency'
+);
+
+CREATE TYPE notification_role_enum AS ENUM (
+'citizen',
+'doctor',
+'nurse',
+'hospital_staff',
+'hospital_admin',
+'smc_official'
+);
+
+CREATE TYPE notification_priority_enum AS ENUM (
+'low',
+'medium',
+'high',
+'critical'
+);
+
+CREATE TYPE notification_target_enum AS ENUM (
+'user',
+'role',
+'ward',
+'hospital',
+'broadcast'
+);
+
+CREATE TYPE health_card_status_enum AS ENUM (
+'active',
+'inactive',
+'suspended',
+'expired'
+);
+
+CREATE TYPE hospital_staff_role_enum AS ENUM (
+'doctor',
+'nurse',
+'technician',
+'pharmacist',
+'receptionist',
+'admin',
+'lab_staff',
+'support_staff'
+);
+
+CREATE TYPE hospital_ward_status_enum AS ENUM (
+'active',
+'inactive',
+'under_maintenance'
+);
+
+CREATE TYPE ambulance_status_enum AS ENUM (
+'available',
+'out_of_service',
+'under_maintenance'
+);
+
+CREATE TYPE hospital_staff_shift_enum AS ENUM (
+'morning',
+'afternoon',
+'evening',
+'night',
+'rotational'
+);
+
+CREATE TYPE doctor_specialization_enum AS ENUM (
+'general',
+'cardiology',
+'dermatology',
+'pediatrics',
+'gynecology',
+'orthopedics',
+'neurology',
+'oncology',
+'psychiatry',
+'ophthalmology',
+'ent',
+'urology',
+'endocrinology',
+'gastroenterology',
+'pulmonology',
+'nephrology'
+);
+
+
+
+
+CREATE TABLE auth_users (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+email TEXT UNIQUE,
+role user_role_enum,
+password_hash TEXT,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE wards (
+ward_id INT PRIMARY KEY,
+ward_name TEXT,
+zone TEXT,
+population INT,
+population_density FLOAT
+);
+
+CREATE TABLE provider (
+provider_id TEXT PRIMARY KEY,
+user_id UUID REFERENCES auth_users(id),
+ward_id INT REFERENCES wards(ward_id),
+name TEXT,
+role provider_type_enum,
+address TEXT,
+location GEOGRAPHY(POINT, 4326),
+email TEXT,
+phone TEXT,
+license TEXT,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE test_types (
+test_id INT PRIMARY KEY DEFAULT nextval('test_type_seq'),
+test_name TEXT,
+test_category TEXT,
+description TEXT
+);
+
+CREATE TABLE lab_tests (
+lab_test_id SERIAL PRIMARY KEY,
+provider_id TEXT REFERENCES provider(provider_id),
+test_type_id INT REFERENCES test_types(test_id),
+price INT
+
+);
+
+CREATE TABLE citizens (
+citizen_id TEXT PRIMARY KEY DEFAULT generate_citizen_id(),
+user_id UUID REFERENCES auth_users(id),
+guardian_id TEXT REFERENCES citizens(citizen_id),
+name TEXT,
+age INT,
+gender gender_enum,
+phone TEXT,
+address TEXT,
+ward_number INT REFERENCES wards(ward_id),
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE health_cards (
+citizen_id TEXT PRIMARY KEY REFERENCES citizens(citizen_id),
+qr_code_url TEXT,
+issued_date DATE,
+status health_card_status_enum DEFAULT 'active'
+);
+
+CREATE TABLE smc_officials (
+official_id TEXT PRIMARY KEY,
+user_id UUID REFERENCES auth_users(id),
+name TEXT,
+designation TEXT,
+phone TEXT,
+role TEXT,
+status staff_status_enum,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE hospitals (
+hospital_id TEXT PRIMARY KEY,
+name TEXT,
+type TEXT,
+address TEXT,
+ward_id INT REFERENCES wards(ward_id),
+location GEOGRAPHY(POINT, 4326)
+contact_number TEXT,
+email TEXT,
+verified_by_smc BOOLEAN,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE hospital_staff (
+staff_uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+staff_id TEXT,
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+user_id UUID REFERENCES auth_users(id),
+name TEXT,
+role hospital_staff_role_enum,
+designation TEXT,
+department TEXT,
+phone TEXT,
+address TEXT,
+shift hospital_staff_shift_enum,
+status staff_status_enum,
+joined_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE doctors (
+staff_uuid UUID PRIMARY KEY REFERENCES hospital_staff(staff_uuid),
+specialization doctor_specialization_enum,
+consultation_time INT,
+work_start_time TIME,
+work_end_time TIME,
+break_start_time TIME,
+break_end_time TIME,
+max_patients_per_day INT
+);
+
+CREATE TABLE ambulances (
+ambulance_id TEXT PRIMARY KEY,
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+driver_name TEXT,
+status ambulance_status_enum,
+current_location TEXT,
+updated_at TIMESTAMP
+);
+
+CREATE TABLE medical_equipment (
+equipment_uuid TEXT PRIMARY KEY,
+equipment_id TEXT,
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+equipment_name TEXT,
+equipment_category TEXT,
+condition_status equipment_condition_status_enum,
+last_serviced_date DATE,
+added_date DATE,
+manufacturer TEXT,
+model_number TEXT,
+equipment_location TEXT
+);
+
+CREATE TABLE medicines (
+medicine_id TEXT PRIMARY KEY,
+medicine_name TEXT,
+medicine_category TEXT,
+manufacturer_name TEXT,
+description TEXT
+);
+
+CREATE TABLE hospital_medicine_stock (
+stock_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+medicine_id TEXT REFERENCES medicines(medicine_id),
+quantity INT,
+threshold INT,
+expiry_date DATE,
+last_updated TIMESTAMP
+);
+
+CREATE TABLE pharmacy_medicine_stock (
+stock_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+provider_id TEXT REFERENCES provider(provider_id),
+medicine_id TEXT REFERENCES medicines(medicine_id),
+quantity INT,
+threshold INT,
+expiry_date DATE,
+last_updated TIMESTAMP
+);
+
+CREATE TABLE hospital_wards (
+hospital_ward_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+ward_name TEXT,
+ward_description TEXT,
+status hospital_ward_status_enum,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE beds (
+bed_id TEXT PRIMARY KEY,
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+assigned_to TEXT REFERENCES citizens(citizen_id),
+located_at UUID REFERENCES hospital_wards(hospital_ward_id),
+bed_type bed_type_enum,
+bed_status bed_status_enum,
+last_updated_on TIMESTAMP
+);
+
+CREATE TABLE appointments (
+appointment_id TEXT PRIMARY KEY DEFAULT generate_appointment_id(),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+hospital_ward_id UUID REFERENCES hospital_wards(hospital_ward_id),
+doctor_id UUID REFERENCES doctors(staff_uuid),
+appointment_type appointment_type_enum,
+appointment_date DATE,
+time_slot TEXT,
+token_id INT,
+status appointment_status_enum,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE telemedicine_sessions (
+session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+appointment_id TEXT REFERENCES appointments(appointment_id),
+doctor_id UUID REFERENCES doctors(staff_uuid),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+session_type telemedicine_type_enum,
+meeting_link TEXT,
+session_status telemedicine_status_enum,
+scheduled_at TIMESTAMP,
+started_at TIMESTAMP,
+ended_at TIMESTAMP,
+session_notes TEXT,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE referrals (
+referral_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+referring_doctor_id UUID REFERENCES doctors(staff_uuid),
+from_hospital_id TEXT REFERENCES hospitals(hospital_id),
+to_hospital_id TEXT REFERENCES hospitals(hospital_id),
+to_doctor_id UUID REFERENCES doctors(staff_uuid),
+referral_reason TEXT,
+urgency_level referral_urgency_enum,
+status referral_status_enum,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE health_records (
+record_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+staff_id UUID REFERENCES hospital_staff(staff_uuid),
+diagnosis TEXT,
+prescription TEXT,
+notes TEXT,
+visit_date DATE
+);
+
+
+CREATE TABLE diagnostic_reports (
+report_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+provider_id TEXT REFERENCES provider(provider_id),
+test_type_id INT REFERENCES test_types(test_id),
+result TEXT,
+description TEXT,
+report_file_url TEXT,
+status diagnostic_report_status_enum,
+test_date DATE,
+uploaded_at TIMESTAMP
+);
+
+CREATE TABLE vaccination_campaigns (
+campaign_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+name TEXT,
+vaccine_type TEXT,
+ward_id INT REFERENCES wards(ward_id),
+date DATE,
+target_population TEXT,
+status vaccination_campaign_status_enum
+);
+
+CREATE TABLE vaccination_records (
+record_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+campaign_id UUID REFERENCES vaccination_campaigns(campaign_id),
+vaccine_type TEXT,
+dose_number INT,
+date_administered DATE
+);
+
+CREATE TABLE diseases (
+disease_id TEXT PRIMARY KEY DEFAULT generate_disease_id(),
+disease_name TEXT,
+disease_type TEXT,
+disease_category disease_category_enum,
+is_notifiable BOOLEAN
+);
+
+CREATE TABLE disease_cases (
+case_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+ward_number INT REFERENCES wards(ward_id),
+disease_id TEXT REFERENCES diseases(disease_id),
+report_date DATE,
+severity disease_severity_enum,
+status disease_case_status_enum
+);
+
+CREATE TABLE health_indicator_data (
+indicator_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ward_number INT REFERENCES wards(ward_id),
+total_doctors INT,
+total_nurses INT,
+total_beds INT,
+available_beds INT,
+vaccinated_people INT,
+eligible_population INT,
+positive_tests INT,
+total_tests INT,
+confirmed_cases INT,
+deaths INT,
+cases_this_week INT,
+cases_last_week INT,
+active_cases INT,
+recorded_at TIMESTAMP
+);
+
+CREATE TABLE health_index_results (
+index_id TEXT PRIMARY KEY DEFAULT generate_index_id(),
+ward_number INT REFERENCES wards(ward_id),
+zone_risk_score FLOAT,
+health_index FLOAT,
+risk_level risk_level_enum,
+calculated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE complaints (
+complaint_id TEXT PRIMARY KEY DEFAULT generate_complaint_id(),
+citizen_id TEXT REFERENCES citizens(citizen_id),
+hospital_id TEXT REFERENCES hospitals(hospital_id),
+description TEXT,
+priority complaint_priority_enum,
+status complaint_status_enum,
+remarks_by_officers TEXT,
+created_at TIMESTAMP DEFAULT now(),
+resolved_at TIMESTAMP
+);
+
+CREATE TABLE alerts (
+alert_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ward_number INT REFERENCES wards(ward_id),
+alert_type TEXT,
+message TEXT,
+severity TEXT,
+created_by TEXT,
+created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE notifications (
+notification_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+title TEXT,
+message TEXT,
+type notification_type_enum,
+priority notification_priority_enum,
+target_type notification_target_enum,
+target_user_id UUID REFERENCES auth_users(id),
+target_role TEXT,
+target_ward_number INT REFERENCES wards(ward_id),
+target_hospital_id TEXT REFERENCES hospitals(hospital_id),
+related_entity TEXT,
+related_entity_id UUID,
+created_by UUID,
+created_at TIMESTAMP DEFAULT now()
+);
+
+
+-------CREATED INDEXES------------
+
+
+CREATE INDEX provider_location_idx
+ON provider
+USING GIST(location);
+
+
+1. On citizens table
+CREATE INDEX idx_citizens_phone ON citizens(phone);
+CREATE INDEX idx_citizens_ward ON citizens(ward_number);
+CREATE INDEX idx_citizens_user ON citizens(user_id);
+
+2. On Hospitals Table
+CREATE INDEX idx_hospitals_ward ON hospitals(ward_id);
+CREATE INDEX hospitals_location_idx
+ON hospitals
+USING GIST(location);
+
+3. On providers table
+CREATE INDEX idx_provider_ward ON provider(ward_id);
+CREATE INDEX idx_provider_user ON provider(user_id);
+CREATE INDEX provider_location_idx
+ON provider
+USING GIST(location);
+
+4. On Hospital_Staff table
+CREATE INDEX idx_staff_hospital ON hospital_staff(hospital_id);
+CREATE INDEX idx_staff_user ON hospital_staff(user_id);
+
+5. On Doctors table
+CREATE INDEX idx_doctors_specialization ON doctors(specialization);
+
+6. On Appointments table
+CREATE INDEX idx_appointments_citizen ON appointments(citizen_id);
+CREATE INDEX idx_appointments_doctor ON appointments(doctor_id);
+CREATE INDEX idx_appointments_hospital ON appointments(hospital_id);
+CREATE INDEX idx_appointments_date ON appointments(appointment_date);
+
+7. On Telemedicine table
+CREATE INDEX idx_telemedicine_citizen ON telemedicine_sessions(citizen_id);
+
+CREATE INDEX idx_telemedicine_doctor ON telemedicine_sessions(doctor_id);
+
+8. On Health Records Table
+CREATE INDEX idx_health_records_citizen ON health_records(citizen_id);
+
+CREATE INDEX idx_health_records_hospital ON health_records(hospital_id);
+
+9. On Diagnostic Reports table
+CREATE INDEX idx_reports_citizen ON diagnostic_reports(citizen_id);
+
+CREATE INDEX idx_reports_testtype ON diagnostic_reports(test_type_id);
+
+10. On Disease surveillance table
+CREATE INDEX idx_disease_cases_ward ON disease_cases(ward_number);
+
+CREATE INDEX idx_disease_cases_disease ON disease_cases(disease_id);
+
+11. On vaccination table
+CREATE INDEX idx_vaccination_citizen ON vaccination_records(citizen_id);
+
+CREATE INDEX idx_vaccination_campaign ON vaccination_records(campaign_id);
+
+12. On Beds Table
+CREATE INDEX idx_beds_hospital ON beds(hospital_id);
+
+CREATE INDEX idx_beds_status ON beds(bed_status);
+
+13. On Medicine Stock table
+CREATE INDEX idx_hospital_medicine_stock_hospital 
+ON hospital_medicine_stock(hospital_id);
+
+CREATE INDEX idx_pharmacy_medicine_stock_provider 
+ON pharmacy_medicine_stock(provider_id);
+
+14. On Complaints table
+CREATE INDEX idx_complaints_citizen ON complaints(citizen_id);
+
+CREATE INDEX idx_complaints_hospital ON complaints(hospital_id);
+
+15. On Notifications Table
+CREATE INDEX idx_notifications_user ON notifications(target_user_id);
+
+CREATE INDEX idx_notifications_ward ON notifications(target_ward_number);
+
+CREATE INDEX idx_notifications_hospital ON notifications(target_hospital_id);

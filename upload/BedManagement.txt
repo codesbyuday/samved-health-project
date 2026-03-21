@@ -1,0 +1,623 @@
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { toast } from 'sonner';
+import {
+  bedService,
+  citizenService,
+  hospitalService,
+  hospitalWardService,
+  type Bed,
+  type Citizen,
+  type Hospital,
+  type HospitalWard,
+} from '@/services/database';
+import {
+  BedDouble,
+  Activity,
+  Wind,
+  AlertTriangle,
+  RefreshCw,
+  Edit,
+  Plus,
+  ChevronRight,
+  Users,
+  Clock,
+  Loader2,
+  Eye,
+  UserPlus,
+  Search,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+
+type BedFilter = 'all' | 'available' | 'occupied' | 'icu' | 'emergency' | 'maintenance';
+
+export default function BedManagement() {
+  const [beds, setBeds] = useState<Bed[]>([]);
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [wards, setWards] = useState<HospitalWard[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<BedFilter>('all');
+  
+  // Dialog states
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [selectedBed, setSelectedBed] = useState<Bed | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    bed_id: '',
+    hospital_id: '',
+    located_at: '',
+    bed_type: 'general' as string,
+    bed_status: 'available' as string,
+  });
+  
+  // Citizen search for assignment
+  const [citizenSearch, setCitizenSearch] = useState('');
+  const [searchedCitizens, setSearchedCitizens] = useState<Citizen[]>([]);
+  const [selectedCitizenId, setSelectedCitizenId] = useState('');
+  const [isSearchingCitizens, setIsSearchingCitizens] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Search citizens when query changes
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (citizenSearch.trim()) {
+        setIsSearchingCitizens(true);
+        const { data } = await citizenService.search(citizenSearch.trim());
+        setSearchedCitizens(data || []);
+        setIsSearchingCitizens(false);
+      } else {
+        setSearchedCitizens([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [citizenSearch]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    const [bedsResult, hospitalsResult, wardsResult] = await Promise.all([
+      bedService.getAll(),
+      hospitalService.getAll(),
+      hospitalWardService.getAll(),
+    ]);
+    
+    if (bedsResult.data) setBeds(bedsResult.data);
+    if (hospitalsResult.data) setHospitals(hospitalsResult.data);
+    if (wardsResult.data) setWards(wardsResult.data);
+    setIsLoading(false);
+  };
+
+  // Calculate stats
+  const stats = useMemo(() => ({
+    total: beds.length,
+    occupied: beds.filter(b => b.bed_status === 'occupied').length,
+    available: beds.filter(b => b.bed_status === 'available').length,
+    maintenance: beds.filter(b => b.bed_status === 'maintenance').length,
+    icuTotal: beds.filter(b => b.bed_type === 'icu').length,
+    icuOccupied: beds.filter(b => b.bed_type === 'icu' && b.bed_status === 'occupied').length,
+    icuAvailable: beds.filter(b => b.bed_type === 'icu' && b.bed_status === 'available').length,
+    emergencyTotal: beds.filter(b => b.bed_type === 'emergency').length,
+    emergencyOccupied: beds.filter(b => b.bed_type === 'emergency' && b.bed_status === 'occupied').length,
+    emergencyAvailable: beds.filter(b => b.bed_type === 'emergency' && b.bed_status === 'available').length,
+  }), [beds]);
+
+  const overallOccupancy = stats.total > 0 ? Math.round((stats.occupied / stats.total) * 100) : 0;
+
+  // Filter beds
+  const filteredBeds = useMemo(() => {
+    switch (activeFilter) {
+      case 'available': return beds.filter(b => b.bed_status === 'available');
+      case 'occupied': return beds.filter(b => b.bed_status === 'occupied');
+      case 'icu': return beds.filter(b => b.bed_type === 'icu');
+      case 'emergency': return beds.filter(b => b.bed_type === 'emergency');
+      case 'maintenance': return beds.filter(b => b.bed_status === 'maintenance');
+      default: return beds;
+    }
+  }, [beds, activeFilter]);
+
+  // Group beds by ward for summary
+  const wardSummary = useMemo(() => {
+    const wardMap = new Map<string, { total: number; occupied: number; available: number; maintenance: number }>();
+    beds.forEach(bed => {
+      const wardName = bed.ward?.ward_name || bed.hospital?.name || 'Unassigned';
+      const current = wardMap.get(wardName) || { total: 0, occupied: 0, available: 0, maintenance: 0 };
+      current.total++;
+      if (bed.bed_status === 'occupied') current.occupied++;
+      else if (bed.bed_status === 'available') current.available++;
+      else if (bed.bed_status === 'maintenance') current.maintenance++;
+      wardMap.set(wardName, current);
+    });
+    return Array.from(wardMap.entries()).map(([ward, data]) => ({
+      ward,
+      ...data,
+      occupancyRate: data.total > 0 ? Math.round((data.occupied / data.total) * 100) : 0,
+    }));
+  }, [beds]);
+
+  // Handlers
+  const handleAddBed = async () => {
+    if (!formData.bed_id.trim()) {
+      toast.error('Bed ID is required');
+      return;
+    }
+    setIsSubmitting(true);
+    const { error } = await bedService.create({
+      bed_id: formData.bed_id.trim(),
+      hospital_id: formData.hospital_id || null,
+      located_at: formData.located_at || null,
+      bed_type: formData.bed_type as 'general' | 'icu' | 'isolation' | 'pediatric' | 'maternity' | 'emergency',
+      bed_status: formData.bed_status as 'available' | 'occupied' | 'reserved' | 'cleaning' | 'maintenance' | 'blocked',
+    });
+    setIsSubmitting(false);
+    if (error) toast.error(error);
+    else {
+      toast.success('Bed added successfully');
+      setShowAddDialog(false);
+      setFormData({ bed_id: '', hospital_id: '', located_at: '', bed_type: 'general', bed_status: 'available' });
+      loadData();
+    }
+  };
+
+  const handleUpdateBed = async () => {
+    if (!selectedBed) return;
+    setIsSubmitting(true);
+    const { error } = await bedService.update(selectedBed.bed_id, {
+      bed_type: formData.bed_type,
+      bed_status: formData.bed_status,
+      hospital_id: formData.hospital_id || null,
+      located_at: formData.located_at || null,
+    });
+    setIsSubmitting(false);
+    if (error) toast.error(error);
+    else {
+      toast.success('Bed updated successfully');
+      setShowEditDialog(false);
+      setSelectedBed(null);
+      loadData();
+    }
+  };
+
+  const handleAssignBed = async () => {
+    if (!selectedBed || !selectedCitizenId) {
+      toast.error('Please select a citizen');
+      return;
+    }
+    setIsSubmitting(true);
+    const { error } = await bedService.assignCitizen(selectedBed.bed_id, selectedCitizenId);
+    setIsSubmitting(false);
+    if (error) toast.error(error);
+    else {
+      toast.success('Bed assigned successfully');
+      setShowAssignDialog(false);
+      setSelectedBed(null);
+      setSelectedCitizenId('');
+      setCitizenSearch('');
+      loadData();
+    }
+  };
+
+  const handleReleaseBed = async (bed: Bed) => {
+    const { error } = await bedService.releaseBed(bed.bed_id);
+    if (error) toast.error(error);
+    else {
+      toast.success('Bed released successfully');
+      loadData();
+    }
+  };
+
+  const openEditDialog = (bed: Bed) => {
+    setSelectedBed(bed);
+    setFormData({
+      bed_id: bed.bed_id,
+      hospital_id: bed.hospital_id || '',
+      located_at: bed.located_at || '',
+      bed_type: bed.bed_type || 'general',
+      bed_status: bed.bed_status || 'available',
+    });
+    setShowEditDialog(true);
+  };
+
+  const openViewDialog = (bed: Bed) => {
+    setSelectedBed(bed);
+    setShowViewDialog(true);
+  };
+
+  const openAssignDialog = (bed: Bed) => {
+    setSelectedBed(bed);
+    setCitizenSearch('');
+    setSelectedCitizenId('');
+    setSearchedCitizens([]);
+    setShowAssignDialog(true);
+  };
+
+  const getBedStatusColor = (status: string | null) => {
+    switch (status) {
+      case 'available': return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800';
+      case 'occupied': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
+      case 'maintenance': return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800';
+      case 'reserved': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Bed Management</h2>
+          <p className="text-sm text-slate-500 mt-1">Monitor and manage hospital bed capacity</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={loadData}>
+            <RefreshCw className="h-4 w-4 mr-2" />Refresh
+          </Button>
+          <Button onClick={() => { setFormData({ bed_id: '', hospital_id: '', located_at: '', bed_type: 'general', bed_status: 'available' }); setShowAddDialog(true); }}>
+            <Plus className="h-4 w-4 mr-2" />Add Bed
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary Cards - Clickable */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="border-l-4 border-l-[#1E88E5] cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveFilter('all')}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <BedDouble className="h-5 w-5 text-[#1E88E5]" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Total Beds</p>
+                <p className="text-2xl font-bold">{stats.total}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-red-500 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveFilter('occupied')}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                <Users className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Occupied</p>
+                <p className="text-2xl font-bold text-red-600">{stats.occupied}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-green-500 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveFilter('available')}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <BedDouble className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Available</p>
+                <p className="text-2xl font-bold text-green-600">{stats.available}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                <Activity className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">ICU Available</p>
+                <p className="text-2xl font-bold text-purple-600">{stats.icuAvailable}/{stats.icuTotal}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Occupancy Overview */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Overall Occupancy</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-500">Current Rate</span>
+              <span className={cn('text-lg font-bold', overallOccupancy > 80 ? 'text-red-600' : overallOccupancy > 60 ? 'text-amber-600' : 'text-green-600')}>
+                {overallOccupancy}%
+              </span>
+            </div>
+            <Progress value={overallOccupancy} className="h-3" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Filter Buttons */}
+      <div className="flex gap-2 flex-wrap">
+        {(['all', 'available', 'occupied', 'icu', 'emergency', 'maintenance'] as BedFilter[]).map((filter) => (
+          <Button
+            key={filter}
+            variant={activeFilter === filter ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setActiveFilter(filter)}
+            className={cn('capitalize', activeFilter === filter && 'bg-[#1E88E5] hover:bg-[#1565C0]')}
+          >
+            {filter === 'all' ? 'All Beds' : filter}
+          </Button>
+        ))}
+      </div>
+
+      {/* Bed List Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Bed Details - {filteredBeds.length} beds</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead>Bed ID</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Hospital</TableHead>
+                <TableHead>Assigned To</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredBeds.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                    No beds found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredBeds.map((bed) => (
+                  <TableRow key={bed.bed_id} className="hover:bg-slate-50">
+                    <TableCell className="font-mono font-medium">{bed.bed_id}</TableCell>
+                    <TableCell className="capitalize">{bed.bed_type || 'general'}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={cn('capitalize', getBedStatusColor(bed.bed_status))}>
+                        {bed.bed_status || 'available'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{bed.hospital?.name || 'Unassigned'}</TableCell>
+                    <TableCell>
+                      {bed.assigned_citizen ? (
+                        <div>
+                          <p className="font-medium">{bed.assigned_citizen.name}</p>
+                          <p className="text-xs text-slate-500">{bed.assigned_citizen.citizen_id}</p>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openViewDialog(bed)}><Eye className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(bed)}><Edit className="h-4 w-4" /></Button>
+                        {bed.bed_status !== 'occupied' && (
+                          <Button variant="ghost" size="sm" onClick={() => openAssignDialog(bed)}><UserPlus className="h-4 w-4" /></Button>
+                        )}
+                        {bed.bed_status === 'occupied' && (
+                          <Button variant="ghost" size="sm" className="text-red-600" onClick={() => handleReleaseBed(bed)}>Release</Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Add Bed Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add New Bed</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Bed ID *</Label>
+              <Input value={formData.bed_id} onChange={(e) => setFormData(prev => ({ ...prev, bed_id: e.target.value }))} placeholder="e.g., BED-001" />
+            </div>
+            <div className="space-y-2">
+              <Label>Bed Type</Label>
+              <Select value={formData.bed_type} onValueChange={(v) => setFormData(prev => ({ ...prev, bed_type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">General</SelectItem>
+                  <SelectItem value="icu">ICU</SelectItem>
+                  <SelectItem value="emergency">Emergency</SelectItem>
+                  <SelectItem value="isolation">Isolation</SelectItem>
+                  <SelectItem value="pediatric">Pediatric</SelectItem>
+                  <SelectItem value="maternity">Maternity</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Hospital</Label>
+              <Select value={formData.hospital_id} onValueChange={(v) => setFormData(prev => ({ ...prev, hospital_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select hospital" /></SelectTrigger>
+                <SelectContent>
+                  {hospitals.map((h) => (<SelectItem key={h.hospital_id} value={h.hospital_id}>{h.name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Initial Status</Label>
+              <Select value={formData.bed_status} onValueChange={(v) => setFormData(prev => ({ ...prev, bed_status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="maintenance">Under Maintenance</SelectItem>
+                  <SelectItem value="reserved">Reserved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
+            <Button onClick={handleAddBed} disabled={isSubmitting}>{isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Add Bed</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Bed Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={(o) => { setShowEditDialog(o); if (!o) setSelectedBed(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Bed</DialogTitle></DialogHeader>
+          {selectedBed && <p className="text-sm text-slate-500 mb-4">Bed ID: {selectedBed.bed_id}</p>}
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Bed Type</Label>
+              <Select value={formData.bed_type} onValueChange={(v) => setFormData(prev => ({ ...prev, bed_type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">General</SelectItem>
+                  <SelectItem value="icu">ICU</SelectItem>
+                  <SelectItem value="emergency">Emergency</SelectItem>
+                  <SelectItem value="isolation">Isolation</SelectItem>
+                  <SelectItem value="pediatric">Pediatric</SelectItem>
+                  <SelectItem value="maternity">Maternity</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={formData.bed_status} onValueChange={(v) => setFormData(prev => ({ ...prev, bed_status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="occupied">Occupied</SelectItem>
+                  <SelectItem value="maintenance">Under Maintenance</SelectItem>
+                  <SelectItem value="reserved">Reserved</SelectItem>
+                  <SelectItem value="cleaning">Cleaning</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
+            <Button onClick={handleUpdateBed} disabled={isSubmitting}>{isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Update</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Bed Dialog */}
+      <Dialog open={showViewDialog} onOpenChange={(o) => { setShowViewDialog(o); if (!o) setSelectedBed(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Bed Details</DialogTitle></DialogHeader>
+          {selectedBed && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-xs text-slate-500">Bed ID</p><p className="font-mono font-medium">{selectedBed.bed_id}</p></div>
+                <div><p className="text-xs text-slate-500">Type</p><p className="capitalize font-medium">{selectedBed.bed_type || 'General'}</p></div>
+                <div><p className="text-xs text-slate-500">Status</p><Badge className={cn('capitalize', getBedStatusColor(selectedBed.bed_status))}>{selectedBed.bed_status || 'Available'}</Badge></div>
+                <div><p className="text-xs text-slate-500">Hospital</p><p>{selectedBed.hospital?.name || 'Unassigned'}</p></div>
+              </div>
+              {selectedBed.assigned_citizen && (
+                <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                  <p className="text-sm font-medium mb-2">Assigned Patient</p>
+                  <p><span className="text-slate-500">Name:</span> {selectedBed.assigned_citizen.name}</p>
+                  <p><span className="text-slate-500">Citizen ID:</span> {selectedBed.assigned_citizen.citizen_id}</p>
+                  <p><span className="text-slate-500">Phone:</span> {selectedBed.assigned_citizen.phone || 'N/A'}</p>
+                </div>
+              )}
+              {selectedBed.last_updated_on && (
+                <p className="text-xs text-slate-400">Last updated: {format(new Date(selectedBed.last_updated_on), 'MMM dd, yyyy h:mm a')}</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Citizen Dialog */}
+      <Dialog open={showAssignDialog} onOpenChange={(o) => { setShowAssignDialog(o); if (!o) { setSelectedBed(null); setCitizenSearch(''); setSelectedCitizenId(''); }}}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Assign Bed to Citizen</DialogTitle></DialogHeader>
+          {selectedBed && <p className="text-sm text-slate-500 mb-4">Bed: {selectedBed.bed_id}</p>}
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Search Citizen</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  placeholder="Search by name, phone, or Citizen ID..."
+                  value={citizenSearch}
+                  onChange={(e) => { setCitizenSearch(e.target.value); setSelectedCitizenId(''); }}
+                  className="pl-10"
+                />
+                {isSearchingCitizens && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin" />}
+              </div>
+              {searchedCitizens.length > 0 && !selectedCitizenId && (
+                <div className="border rounded-lg divide-y max-h-40 overflow-auto">
+                  {searchedCitizens.slice(0, 5).map((c) => (
+                    <button key={c.citizen_id} className="w-full flex items-center gap-3 p-2 hover:bg-slate-50 text-left" onClick={() => { setSelectedCitizenId(c.citizen_id); setCitizenSearch(`${c.name} (${c.citizen_id})`); }}>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-sm">{c.name?.charAt(0)}</div>
+                      <div><p className="font-medium text-sm">{c.name}</p><p className="text-xs text-slate-500">{c.citizen_id}</p></div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAssignDialog(false)}>Cancel</Button>
+            <Button onClick={handleAssignBed} disabled={isSubmitting || !selectedCitizenId}>{isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Assign</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
