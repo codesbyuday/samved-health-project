@@ -1,15 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   Bell,
   Search,
-  User,
   LogOut,
-  Settings,
-  HelpCircle,
   ChevronDown,
   Menu,
   X,
@@ -28,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface NavbarProps {
@@ -43,11 +42,23 @@ const staticNotifications = [
 ];
 
 export default function Navbar({ onMenuToggle, isMobileSidebarOpen }: NavbarProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const { theme, toggleTheme, mounted } = useTheme();
+  const { profile, logout } = useAuth();
 
   const unreadCount = staticNotifications.filter((n) => !n.read).length;
+
+  const displayName = profile?.name || 'Hospital Staff';
+  const displayRole = profile?.role || profile?.designation || 'Staff';
+  const displayHospitalId = profile?.hospital_id || 'N/A';
+  const avatarInitial = displayName.charAt(0).toUpperCase();
+
+  const handleLogout = () => {
+    logout();
+    router.replace('/login');
+  };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -209,14 +220,14 @@ export default function Navbar({ onMenuToggle, isMobileSidebarOpen }: NavbarProp
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2 h-9">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#1E88E5] to-blue-600 text-white font-medium text-sm">
-                  D
+                  {avatarInitial}
                 </div>
                 <div className="hidden md:flex flex-col items-start">
                   <span className="text-sm font-medium text-slate-700 dark:text-white">
-                    Dr. Rajesh Patil
+                    {displayName}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Admin
+                    {displayRole}
                   </span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-slate-400 hidden md:block" />
@@ -225,29 +236,28 @@ export default function Navbar({ onMenuToggle, isMobileSidebarOpen }: NavbarProp
             <DropdownMenuContent align="end" className="w-56 dark:bg-slate-800 dark:border-slate-700">
               <DropdownMenuLabel className="dark:text-white">
                 <div className="flex flex-col">
-                  <span className="font-medium">Dr. Rajesh Patil</span>
+                  <span className="font-medium">{displayName}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">
-                    admin.smchospital@solapur.gov.in
+                    {displayRole}
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">
+                    Hospital ID: {displayHospitalId}
                   </span>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="dark:bg-slate-700" />
-              <DropdownMenuItem className="gap-2 dark:text-white dark:focus:bg-slate-700">
-                <User className="h-4 w-4" />
-                <span>My Profile</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 dark:text-white dark:focus:bg-slate-700">
-                <Settings className="h-4 w-4" />
-                <span>Account Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 dark:text-white dark:focus:bg-slate-700">
-                <HelpCircle className="h-4 w-4" />
-                <span>Help & Support</span>
-              </DropdownMenuItem>
+              <div className="px-2 py-2 text-xs text-slate-500 dark:text-slate-400">
+                <p>{profile?.designation || 'Designation not available'}</p>
+                <p>{profile?.department || 'Department not available'}</p>
+                <p>{profile?.phone || 'Phone not available'}</p>
+              </div>
               <DropdownMenuSeparator className="dark:bg-slate-700" />
-              <DropdownMenuItem className="gap-2 text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400 dark:focus:bg-slate-700">
+              <DropdownMenuItem
+                className="gap-2 text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400 dark:focus:bg-slate-700"
+                onClick={handleLogout}
+              >
                 <LogOut className="h-4 w-4" />
-                <span>Sign Out</span>
+                <span>Logout</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

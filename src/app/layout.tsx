@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 
 const geistSans = Geist({
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
   keywords: ["Hospital Management", "Healthcare", "Solapur", "Government Hospital", "Public Health", "SMC", "Medical Portal"],
   authors: [{ name: "Solapur Municipal Corporation" }],
   icons: {
-    icon: "/logo.svg",
+    icon: "/favicon_smc.png",
   },
   openGraph: {
     title: "SMC Hospital Portal",
@@ -42,8 +43,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         <ThemeProvider>
-          {children}
-          <Toaster />
+          <AuthProvider>
+            {children}
+            <Toaster />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
