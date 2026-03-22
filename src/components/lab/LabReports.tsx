@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -60,10 +61,13 @@ import {
   RefreshCw,
   User,
   Phone,
+  Activity,
   XCircle as XCircleIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import AccessDenied from '@/components/auth/AccessDenied';
+import { useRBAC } from '@/hooks/use-rbac';
 
 // Status configuration with colors and icons
 const statusConfig: Record<LabReportStatus, { color: string; bgColor: string; icon: React.ReactNode; label: string }> = {
@@ -122,6 +126,9 @@ const initialFormData: LabReportFormData = {
 };
 
 export default function LabReports() {
+  const { getModuleAccess } = useRBAC();
+  const moduleAccess = getModuleAccess('lab-reports');
+  const canManageReports = moduleAccess === 'full';
   const { toast } = useToast();
   
   // State
@@ -310,6 +317,10 @@ export default function LabReports() {
 
   // Handle add report
   const handleAddReport = async () => {
+    if (!canManageReports) {
+      toast({ title: 'Access Denied', description: 'You do not have permission to add lab reports.', variant: 'destructive' });
+      return;
+    }
     if (!validateForm()) return;
 
     setIsSubmitting(true);
@@ -370,6 +381,10 @@ export default function LabReports() {
 
   // Handle edit report
   const handleEditReport = async () => {
+    if (!canManageReports) {
+      toast({ title: 'Access Denied', description: 'You do not have permission to update lab reports.', variant: 'destructive' });
+      return;
+    }
     if (!editingReport) return;
     if (!validateForm(true)) return;
 
@@ -437,14 +452,17 @@ export default function LabReports() {
       return;
     }
 
-    const result = await storageService.viewOrDownloadFile(report.report_file_url, 'view');
-    if (result.error) {
+    const result = await storageService.getProtectedLabReportUrl(report.report_id, 'view');
+    if (result.error || !result.url) {
       toast({
         title: 'Error viewing file',
-        description: result.error,
+        description: result.error || 'Failed to access the file.',
         variant: 'destructive',
       });
+      return;
     }
+
+    window.open(result.url, '_blank', 'noopener,noreferrer');
   };
 
   // Handle download file
@@ -458,18 +476,35 @@ export default function LabReports() {
       return;
     }
 
-    const result = await storageService.viewOrDownloadFile(report.report_file_url, 'download');
-    if (result.error) {
+    const result = await storageService.getProtectedLabReportUrl(report.report_id, 'download');
+    if (result.error || !result.url) {
       toast({
         title: 'Error downloading file',
-        description: result.error,
+        description: result.error || 'Failed to access the file.',
         variant: 'destructive',
       });
+      return;
     }
+
+    const link = window.document.createElement('a');
+    link.href = result.url;
+    link.download = result.fileName || `report-${report.report_id}`;
+    window.document.body.appendChild(link);
+    link.click();
+    window.document.body.removeChild(link);
+  };
+
+  const openViewDialog = (report: DiagnosticReport) => {
+    setViewingReport(report);
+    setShowViewDialog(true);
   };
 
   // Open edit dialog
   const openEditDialog = (report: DiagnosticReport) => {
+    if (!canManageReports) {
+      toast({ title: 'Access Denied', description: 'You do not have permission to edit lab reports.', variant: 'destructive' });
+      return;
+    }
     if (report.status === 'completed') {
       toast({
         title: 'Cannot edit',
@@ -511,6 +546,10 @@ export default function LabReports() {
     return reports.filter(r => r.status === status).length;
   };
 
+  if (moduleAccess === 'none') {
+    return <AccessDenied message="You do not have permission to access lab reports." />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -521,16 +560,20 @@ export default function LabReports() {
             Manage patient lab test reports and diagnostics
           </p>
         </div>
-        <Button 
-          className="bg-[#1E88E5] hover:bg-[#1565C0]" 
-          onClick={() => {
-            resetForm();
-            setShowAddDialog(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Lab Record
-        </Button>
+        {canManageReports ? (
+          <Button 
+            className="bg-[#1E88E5] hover:bg-[#1565C0]" 
+            onClick={() => {
+              resetForm();
+              setShowAddDialog(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Lab Record
+          </Button>
+        ) : (
+          <Badge variant="outline">View Only</Badge>
+        )}
       </div>
 
       {/* Stats Cards - Interactive */}
@@ -695,37 +738,38 @@ export default function LabReports() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => handleViewFile(report)}
-                                title="View Report"
+                                onClick={() => openViewDialog(report)}
+                                title="View Report Details"
                                 className="hover:bg-blue-50 dark:hover:bg-blue-900/30"
                               >
                                 <Eye className="h-4 w-4 text-blue-500" />
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDownloadFile(report)}
-                                title="Download Report"
-                                className="hover:bg-green-50 dark:hover:bg-green-900/30"
-                              >
-                                <Download className="h-4 w-4 text-green-500" />
-                              </Button>
                             </>
                           ) : (
-                            <span className="text-xs text-slate-400 dark:text-slate-500 px-2">No file</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openViewDialog(report)}
+                              title="View Report Details"
+                              className="hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                            >
+                              <Eye className="h-4 w-4 text-blue-500" />
+                            </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openEditDialog(report)}
-                            disabled={report.status === 'completed'}
-                            title={report.status === 'completed' ? 'Completed reports cannot be edited' : 'Edit Report'}
-                            className={cn(
-                              report.status === 'completed' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-50 dark:hover:bg-amber-900/30'
-                            )}
-                          >
-                            <Edit className="h-4 w-4 text-amber-500" />
-                          </Button>
+                          {canManageReports ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openEditDialog(report)}
+                              disabled={report.status === 'completed'}
+                              title={report.status === 'completed' ? 'Completed reports cannot be edited' : 'Edit Report'}
+                              className={cn(
+                                report.status === 'completed' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-50 dark:hover:bg-amber-900/30'
+                              )}
+                            >
+                              <Edit className="h-4 w-4 text-amber-500" />
+                            </Button>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -738,7 +782,7 @@ export default function LabReports() {
       </Card>
 
       {/* Add Lab Record Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => {
+      <Dialog open={canManageReports && showAddDialog} onOpenChange={(open) => {
         setShowAddDialog(open);
         if (!open) resetForm();
       }}>
@@ -1022,7 +1066,7 @@ export default function LabReports() {
       </Dialog>
 
       {/* Edit Lab Report Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={(open) => {
+      <Dialog open={canManageReports && showEditDialog} onOpenChange={(open) => {
         setShowEditDialog(open);
         if (!open) resetForm();
       }}>
@@ -1221,63 +1265,117 @@ export default function LabReports() {
       </Dialog>
 
       {/* View Report Dialog */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent>
+      <Dialog
+        open={showViewDialog}
+        onOpenChange={(open) => {
+          setShowViewDialog(open);
+          if (!open) {
+            setViewingReport(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-slate-800 dark:text-white">Lab Report Details</DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400">
+              Complete information about this lab report
+            </DialogDescription>
           </DialogHeader>
           {viewingReport && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-slate-500 dark:text-slate-400">Citizen</Label>
-                  <p className="font-medium text-slate-800 dark:text-white">{viewingReport.citizen?.name}</p>
+            <ScrollArea className="max-h-[70vh] pr-4">
+              <div className="space-y-4">
+                <div className="rounded-xl border bg-slate-50 p-5 space-y-4">
+                  <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    Test Information
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Test Name:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.test_type?.test_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Test Category:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.test_type?.test_category || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Test Date:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">
+                        {viewingReport.test_date ? format(new Date(viewingReport.test_date), 'MMMM dd, yyyy') : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400 mb-1">Status:</p>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'flex items-center gap-1 w-fit',
+                          statusConfig[viewingReport.status as LabReportStatus]?.bgColor,
+                          statusConfig[viewingReport.status as LabReportStatus]?.color
+                        )}
+                      >
+                        {statusConfig[viewingReport.status as LabReportStatus]?.icon}
+                        <span>{statusConfig[viewingReport.status as LabReportStatus]?.label || viewingReport.status}</span>
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-slate-500 dark:text-slate-400">Test Type</Label>
-                  <p className="font-medium text-slate-800 dark:text-white">{viewingReport.test_type?.test_name}</p>
+
+                <div className="rounded-xl border bg-slate-50 p-5 space-y-4">
+                  <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Patient Information
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Patient Name:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.citizen?.name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Patient ID:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.citizen_id || 'N/A'}</p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-slate-500 dark:text-slate-400">Status</Label>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'flex items-center gap-1 w-fit mt-1',
-                      statusConfig[viewingReport.status as LabReportStatus]?.bgColor
-                    )}
-                  >
-                    {statusConfig[viewingReport.status as LabReportStatus]?.icon}
-                    <span className="text-slate-700 dark:text-slate-300">{statusConfig[viewingReport.status as LabReportStatus]?.label}</span>
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-slate-500 dark:text-slate-400">Test Date</Label>
-                  <p className="font-medium text-slate-800 dark:text-white">
-                    {viewingReport.test_date 
-                      ? format(new Date(viewingReport.test_date), 'MMM dd, yyyy')
-                      : '-'}
-                  </p>
+
+                <div className="rounded-xl border bg-slate-50 p-5 space-y-4">
+                  <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Results
+                  </h4>
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Result:</p>
+                      <p className="font-medium text-slate-800 dark:text-white whitespace-pre-wrap">
+                        {viewingReport.result || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Description:</p>
+                      <p className="font-medium text-slate-800 dark:text-white whitespace-pre-wrap">
+                        {viewingReport.description || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              {viewingReport.result && (
-                <div>
-                  <Label className="text-slate-500 dark:text-slate-400">Result Summary</Label>
-                  <p className="text-sm bg-slate-50 dark:bg-slate-800 p-2 rounded mt-1 text-slate-700 dark:text-slate-300">
-                    {viewingReport.result}
-                  </p>
-                </div>
-              )}
-            </div>
+            </ScrollArea>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowViewDialog(false)} className="border-slate-200 dark:border-slate-700">
               Close
             </Button>
             {viewingReport?.report_file_url && (
-              <Button onClick={() => handleViewFile(viewingReport)} className="bg-[#1E88E5] hover:bg-[#1565C0]">
-                <Eye className="h-4 w-4 mr-2" />
-                View File
-              </Button>
+              <>
+                <Button variant="outline" onClick={() => handleViewFile(viewingReport)} className="border-slate-200 dark:border-slate-700">
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Report
+                </Button>
+                <Button onClick={() => handleDownloadFile(viewingReport)} className="bg-[#1E88E5] hover:bg-[#1565C0]">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Report
+                </Button>
+              </>
             )}
           </DialogFooter>
         </DialogContent>

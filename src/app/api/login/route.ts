@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_COOKIE_NAME, StaffProfile, decodeSession, encodeSession } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, AuthenticatedUser, decodeSession, encodeSession } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase-server";
+import { getAuthenticatedStaffProfile } from "@/lib/server-auth";
 
-function buildSessionResponse(user: StaffProfile) {
+function buildSessionResponse(user: AuthenticatedUser) {
   const response = NextResponse.json({
     success: true,
     user,
   });
 
-  response.cookies.set(AUTH_COOKIE_NAME, encodeSession({ user_id: user.user_id, role: user.auth_role }), {
+  response.cookies.set(AUTH_COOKIE_NAME, encodeSession({ user_id: user.user_id, role: user.access_role }), {
     httpOnly: false,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -20,46 +21,10 @@ function buildSessionResponse(user: StaffProfile) {
 }
 
 async function getStaffProfileByUserId(userId: string) {
-  const { data: profile, error: profileError } = await supabaseServer
-    .from("hospital_staff")
-    .select("name, designation, department, hospital_id, role, phone")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (profileError || !profile) {
-    return {
-      user: null,
-      error: "Hospital staff profile not found",
-    };
-  }
-
-  const { data: authUser, error: userError } = await supabaseServer
-    .from("auth_users")
-    .select("id, email, role")
-    .eq("id", userId)
-    .eq("role", "hospital_staff")
-    .maybeSingle();
-
-  if (userError || !authUser) {
-    return {
-      user: null,
-      error: "Access restricted to hospital staff only",
-    };
-  }
-
+  const { user, error } = await getAuthenticatedStaffProfile(userId);
   return {
-    user: {
-      user_id: authUser.id,
-      auth_role: authUser.role,
-      email: authUser.email,
-      name: profile.name,
-      designation: profile.designation,
-      department: profile.department,
-      hospital_id: profile.hospital_id,
-      role: profile.role,
-      phone: profile.phone,
-    } satisfies StaffProfile,
-    error: null,
+    user,
+    error: error || (user ? null : "Hospital staff profile not found"),
   };
 }
 

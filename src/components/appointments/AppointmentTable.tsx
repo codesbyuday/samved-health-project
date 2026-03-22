@@ -77,6 +77,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import AccessDenied from '@/components/auth/AccessDenied';
+import { useRBAC } from '@/hooks/use-rbac';
 
 const statusColors: Record<string, string> = {
   booked: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -88,6 +90,10 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AppointmentTable() {
+  const { getModuleAccess } = useRBAC();
+  const moduleAccess = getModuleAccess('appointments');
+  const canManageAppointments = moduleAccess === 'full';
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
@@ -211,6 +217,10 @@ export default function AppointmentTable() {
   };
 
   const handleConfirm = async (apt: Appointment) => {
+    if (!canManageAppointments) {
+      toast.error('Access Denied');
+      return;
+    }
     const { error } = await appointmentService.update(apt.appointment_id, { status: 'confirmed' });
     if (error) toast.error(error);
     else {
@@ -307,6 +317,10 @@ export default function AppointmentTable() {
   };
 
   const handleCreateAppointment = async () => {
+    if (!canManageAppointments) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!validateNewAppointment()) return;
     
     setIsSubmitting(true);
@@ -340,6 +354,10 @@ export default function AppointmentTable() {
   };
 
   const handleRescheduleSubmit = async () => {
+    if (!canManageAppointments) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!selectedAppointment) return;
     // This would need proper form handling for reschedule
     toast.success('Appointment rescheduled');
@@ -367,6 +385,10 @@ export default function AppointmentTable() {
     );
   }
 
+  if (moduleAccess === 'none') {
+    return <AccessDenied message="You do not have permission to access appointments." />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -375,10 +397,14 @@ export default function AppointmentTable() {
           <h2 className="text-2xl font-bold text-slate-800">Appointment Management</h2>
           <p className="text-sm text-slate-500 mt-1">Manage patient appointments and scheduling</p>
         </div>
-        <Button onClick={() => setShowNewDialog(true)} className="bg-[#1E88E5] hover:bg-[#1565C0]">
-          <Plus className="h-4 w-4 mr-2" />
-          Book New Appointment
-        </Button>
+        {canManageAppointments ? (
+          <Button onClick={() => setShowNewDialog(true)} className="bg-[#1E88E5] hover:bg-[#1565C0]">
+            <Plus className="h-4 w-4 mr-2" />
+            Book New Appointment
+          </Button>
+        ) : (
+          <Badge variant="outline">View Only</Badge>
+        )}
       </div>
 
       {/* Filters */}
@@ -495,12 +521,12 @@ export default function AppointmentTable() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-1">
-                        {(apt.status === 'booked') && (
+                        {canManageAppointments && (apt.status === 'booked') && (
                           <Button size="sm" variant="ghost" className="h-8 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleConfirm(apt)} title="Confirm">
                             <CheckCircle className="h-4 w-4" />
                           </Button>
                         )}
-                        {(apt.status === 'booked' || apt.status === 'confirmed') && (
+                        {canManageAppointments && (apt.status === 'booked' || apt.status === 'confirmed') && (
                           <>
                             <Button size="sm" variant="ghost" className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleReschedule(apt)} title="Reschedule">
                               <RotateCcw className="h-4 w-4" />
@@ -521,10 +547,12 @@ export default function AppointmentTable() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Clock className="h-4 w-4 mr-2" />
-                              Send Reminder
-                            </DropdownMenuItem>
+                            {canManageAppointments ? (
+                              <DropdownMenuItem>
+                                <Clock className="h-4 w-4 mr-2" />
+                                Send Reminder
+                              </DropdownMenuItem>
+                            ) : null}
                             <DropdownMenuItem 
                               onClick={() => handlePrintSlip(apt)}
                               disabled={printingAppointmentId === apt.appointment_id}
@@ -713,7 +741,7 @@ export default function AppointmentTable() {
       </Dialog>
 
       {/* New Appointment Dialog */}
-      <Dialog open={showNewDialog} onOpenChange={(o) => { setShowNewDialog(o); if (!o) setNewAppointment({ citizen_id: '', doctor_id: '', hospital_id: '', department: '', appointment_date: '', time_slot: '', appointment_type: 'in_person', citizenSearch: '' }); }}>
+      <Dialog open={canManageAppointments && showNewDialog} onOpenChange={(o) => { setShowNewDialog(o); if (!o) setNewAppointment({ citizen_id: '', doctor_id: '', hospital_id: '', department: '', appointment_date: '', time_slot: '', appointment_type: 'in_person', citizenSearch: '' }); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Book New Appointment</DialogTitle>
@@ -864,7 +892,7 @@ export default function AppointmentTable() {
       </Dialog>
 
       {/* Reschedule Dialog */}
-      <Dialog open={showRescheduleDialog} onOpenChange={setShowRescheduleDialog}>
+      <Dialog open={canManageAppointments && showRescheduleDialog} onOpenChange={setShowRescheduleDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reschedule Appointment</DialogTitle>
@@ -899,7 +927,7 @@ export default function AppointmentTable() {
       </Dialog>
 
       {/* Cancel Dialog */}
-      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+      <Dialog open={canManageAppointments && showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel Appointment</DialogTitle>

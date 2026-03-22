@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import AccessDenied from '@/components/auth/AccessDenied';
+import { useRBAC } from '@/hooks/use-rbac';
 import {
   citizenService,
   wardService,
@@ -87,6 +89,9 @@ function getDaysArray(year: number, month: number): number[] {
 }
 
 export default function CitizenServices() {
+  const { getModuleAccess } = useRBAC();
+  const moduleAccess = getModuleAccess('citizen-services');
+  const canManageCitizens = moduleAccess === 'full';
   const [searchQuery, setSearchQuery] = useState('');
   const [citizens, setCitizens] = useState<Citizen[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
@@ -140,18 +145,6 @@ export default function CitizenServices() {
     if (data) setWards(data);
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery.trim()) {
-        handleSearch();
-      } else {
-        setCitizens([]);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
-
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
@@ -159,8 +152,18 @@ export default function CitizenServices() {
     setIsSearching(false);
     if (error) toast.error(error);
     else setCitizens(data || []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery.trim()]);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        void handleSearch();
+      } else {
+        setCitizens([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [handleSearch, searchQuery]);
 
   // Handle photo selection
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -242,6 +245,10 @@ export default function CitizenServices() {
   };
 
   const handleAdd = async () => {
+    if (!canManageCitizens) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!validateForm()) return;
     setIsSubmitting(true);
     
@@ -328,6 +335,10 @@ export default function CitizenServices() {
   };
 
   const handleUpdate = async () => {
+    if (!canManageCitizens) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!selectedCitizen || !validateForm(true)) return;
     setIsSubmitting(true);
     
@@ -386,6 +397,10 @@ export default function CitizenServices() {
   };
 
   const openEditDialog = (citizen: Citizen) => {
+    if (!canManageCitizens) {
+      toast.error('Access Denied');
+      return;
+    }
     setSelectedCitizen(citizen);
     
     // Parse DOB if available
@@ -667,6 +682,10 @@ export default function CitizenServices() {
     </div>
   );
 
+  if (moduleAccess === 'none') {
+    return <AccessDenied message="You do not have permission to access citizen services." />;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -674,9 +693,13 @@ export default function CitizenServices() {
           <h2 className="text-2xl font-bold text-slate-800">Citizen Services</h2>
           <p className="text-sm text-slate-500 mt-1">Register, search, and manage citizen records</p>
         </div>
-        <Button onClick={() => { resetForm(); setShowAddDialog(true); }} className="gap-2">
-          <UserPlus className="h-4 w-4" /> Register New Citizen
-        </Button>
+        {canManageCitizens ? (
+          <Button onClick={() => { resetForm(); setShowAddDialog(true); }} className="gap-2">
+            <UserPlus className="h-4 w-4" /> Register New Citizen
+          </Button>
+        ) : (
+          <Badge variant="outline">View Only</Badge>
+        )}
       </div>
 
       <Card>
@@ -757,9 +780,11 @@ export default function CitizenServices() {
                               <Button variant="ghost" size="sm" onClick={() => openViewDialog(c)} title="View Details">
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => openEditDialog(c)} title="Edit">
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              {canManageCitizens ? (
+                                <Button variant="ghost" size="sm" onClick={() => openEditDialog(c)} title="Edit">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              ) : null}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -781,7 +806,7 @@ export default function CitizenServices() {
       </Card>
 
       {/* Add Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(o) => { setShowAddDialog(o); if (!o) resetForm(); }}>
+      <Dialog open={canManageCitizens && showAddDialog} onOpenChange={(o) => { setShowAddDialog(o); if (!o) resetForm(); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Register New Citizen</DialogTitle>
@@ -798,7 +823,7 @@ export default function CitizenServices() {
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={(o) => { setShowEditDialog(o); if (!o) { setSelectedCitizen(null); resetForm(); }}}>
+      <Dialog open={canManageCitizens && showEditDialog} onOpenChange={(o) => { setShowEditDialog(o); if (!o) { setSelectedCitizen(null); resetForm(); }}}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Citizen</DialogTitle>
@@ -888,9 +913,11 @@ export default function CitizenServices() {
                 <Button variant="outline" className="flex-1" onClick={() => openHealthCardDialog(selectedCitizen)}>
                   <Calendar className="h-4 w-4 mr-2" /> See Health Card
                 </Button>
-                <Button variant="outline" className="flex-1" onClick={() => { setShowViewDialog(false); openEditDialog(selectedCitizen); }}>
-                  <Edit className="h-4 w-4 mr-2" /> Edit
-                </Button>
+                {canManageCitizens ? (
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowViewDialog(false); openEditDialog(selectedCitizen); }}>
+                    <Edit className="h-4 w-4 mr-2" /> Edit
+                  </Button>
+                ) : null}
               </div>
             </div>
           )}

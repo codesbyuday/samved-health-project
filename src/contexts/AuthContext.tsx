@@ -3,19 +3,21 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   AUTH_COOKIE_NAME,
-  AUTH_SESSION_KEY,
-  StaffProfile,
+  USER_SESSION_KEY,
+  AuthenticatedUser,
+  UserProfile,
   SessionPayload,
   decodeSession,
   encodeSession,
 } from "@/lib/auth";
 
 interface AuthContextValue {
-  profile: StaffProfile | null;
+  user: UserProfile | null;
   session: SessionPayload | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  setAuthState: (profile: StaffProfile) => void;
+  setAuthState: (user: AuthenticatedUser) => void;
+  updateUser: (user: AuthenticatedUser) => void;
   logout: () => void;
 }
 
@@ -23,47 +25,94 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function writeSession(payload: SessionPayload) {
   const encodedSession = encodeSession(payload);
-  localStorage.setItem(AUTH_SESSION_KEY, encodedSession);
   document.cookie = `${AUTH_COOKIE_NAME}=${encodedSession}; path=/; max-age=604800; samesite=lax`;
 }
 
+function writeUserSession(user: UserProfile) {
+  localStorage.setItem(USER_SESSION_KEY, JSON.stringify(user));
+}
+
 function clearStoredSession() {
-  localStorage.removeItem(AUTH_SESSION_KEY);
+  localStorage.removeItem(USER_SESSION_KEY);
   document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; samesite=lax`;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [profile, setProfile] = useState<StaffProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const logout = useCallback(() => {
     clearStoredSession();
-    setProfile(null);
+    setUser(null);
     setSession(null);
   }, []);
 
-  const setAuthState = useCallback((nextProfile: StaffProfile) => {
+  const updateUser = useCallback((nextUser: AuthenticatedUser) => {
     const nextSession = {
-      user_id: nextProfile.user_id,
-      role: nextProfile.auth_role,
+      user_id: nextUser.user_id,
+      role: nextUser.access_role,
     };
 
     writeSession(nextSession);
-    setProfile(nextProfile);
+    writeUserSession({
+      user_id: nextUser.user_id,
+      name: nextUser.name,
+      email: nextUser.email,
+      role: nextUser.role,
+      hospital_id: nextUser.hospital_id,
+      hospital_name: nextUser.hospital_name,
+      staff_uuid: nextUser.staff_uuid,
+      staff_id: nextUser.staff_id,
+      designation: nextUser.designation,
+      department: nextUser.department,
+      phone: nextUser.phone,
+      address: nextUser.address,
+      joined_at: nextUser.joined_at,
+    });
+    setUser({
+      user_id: nextUser.user_id,
+      name: nextUser.name,
+      email: nextUser.email,
+      role: nextUser.role,
+      hospital_id: nextUser.hospital_id,
+      hospital_name: nextUser.hospital_name,
+      staff_uuid: nextUser.staff_uuid,
+      staff_id: nextUser.staff_id,
+      designation: nextUser.designation,
+      department: nextUser.department,
+      phone: nextUser.phone,
+      address: nextUser.address,
+      joined_at: nextUser.joined_at,
+    });
     setSession(nextSession);
   }, []);
 
+  const setAuthState = useCallback(
+    (nextUser: AuthenticatedUser) => {
+      updateUser(nextUser);
+    },
+    [updateUser]
+  );
+
   useEffect(() => {
     const restoreSession = async () => {
-      const storedSession = localStorage.getItem(AUTH_SESSION_KEY);
+      const storedUser = localStorage.getItem(USER_SESSION_KEY);
 
-      if (!storedSession) {
-        setIsLoading(false);
-        return;
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser) as UserProfile;
+          setUser(parsedUser);
+        } catch {
+          localStorage.removeItem(USER_SESSION_KEY);
+        }
       }
 
-      const parsedSession = decodeSession(storedSession);
+      const cookieMatch = document.cookie
+        .split("; ")
+        .find((item) => item.startsWith(`${AUTH_COOKIE_NAME}=`))
+        ?.split("=")[1];
+      const parsedSession = cookieMatch ? decodeSession(cookieMatch) : null;
 
       if (!parsedSession) {
         clearStoredSession();
@@ -72,32 +121,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const response = await fetch("/api/login", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId: parsedSession.user_id,
-            role: parsedSession.role,
-            sessionRestore: true,
-          }),
-        });
+        const response = await fetch("/api/profile");
 
         const result = await response.json();
 
         if (!response.ok || !result.success) {
           clearStoredSession();
-          setProfile(null);
+          setUser(null);
           setSession(null);
           setIsLoading(false);
           return;
         }
 
-        setAuthState(result.user as StaffProfile);
+        setAuthState(result.user as AuthenticatedUser);
       } catch {
         clearStoredSession();
-        setProfile(null);
+        setUser(null);
         setSession(null);
       } finally {
         setIsLoading(false);
@@ -109,14 +148,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(
     () => ({
-      profile,
+      user,
       session,
-      isAuthenticated: Boolean(profile && session),
+      isAuthenticated: Boolean(user && session),
       isLoading,
       setAuthState,
+      updateUser,
       logout,
     }),
-    [isLoading, logout, profile, session, setAuthState]
+    [isLoading, logout, session, setAuthState, updateUser, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { useRBAC } from '@/hooks/use-rbac';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -131,9 +132,13 @@ export default function Sidebar({
   isOpen,
   onClose,
 }: SidebarProps) {
+  const { visibleModules } = useRBAC();
+
   const handleNavigate = (page: PageType) => {
     onNavigate(page);
   };
+
+  const visibleNavItems = navItems.filter((item) => visibleModules.includes(item.id));
 
   return (
     <>
@@ -203,7 +208,7 @@ export default function Sidebar({
         {/* Navigation */}
         <nav className="mt-4 px-2 overflow-y-auto h-[calc(100vh-14rem)]">
           <ul className="space-y-1">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <li key={item.id}>
                 <button
                   onClick={() => handleNavigate(item.id)}

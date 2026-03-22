@@ -2,6 +2,7 @@
 
 import React, { useCallback, useSyncExternalStore, useState } from "react";
 import Sidebar, { PageType } from "@/components/layout/Sidebar";
+import AccessDenied from "@/components/auth/AccessDenied";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import DashboardPage from "@/components/dashboard/DashboardPage";
@@ -17,6 +18,7 @@ import MedicineStock from "@/components/medicine/MedicineStock";
 import ComplaintResolution from "@/components/complaints/ComplaintResolution";
 import StaffManagement from "@/components/staff/StaffManagement";
 import SettingsPage from "@/components/common/SettingsPage";
+import { useRBAC } from "@/hooks/use-rbac";
 import { cn } from "@/lib/utils";
 
 function useMediaQuery(query: string) {
@@ -39,6 +41,7 @@ function useMediaQuery(query: string) {
 }
 
 export default function DashboardShell() {
+  const { canAccessModule, visibleModules } = useRBAC();
   const [currentPage, setCurrentPage] = useState<PageType>("dashboard");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -48,6 +51,12 @@ export default function DashboardShell() {
   React.useEffect(() => {
     setIsSidebarCollapsed(isMobile);
   }, [isMobile]);
+
+  React.useEffect(() => {
+    if (!visibleModules.includes(currentPage)) {
+      setCurrentPage((visibleModules[0] as PageType) || "settings");
+    }
+  }, [currentPage, visibleModules]);
 
   const handleNavigate = useCallback((page: PageType) => {
     setCurrentPage(page);
@@ -68,6 +77,10 @@ export default function DashboardShell() {
   }, []);
 
   const renderPageContent = () => {
+    if (!canAccessModule(currentPage)) {
+      return <AccessDenied message="You do not have permission to open this module." />;
+    }
+
     switch (currentPage) {
       case "dashboard":
         return <DashboardPage onNavigate={handleNavigate} />;

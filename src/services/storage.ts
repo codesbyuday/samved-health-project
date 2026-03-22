@@ -18,6 +18,10 @@ export interface SignedUrlResult {
   error: string | null;
 }
 
+export interface ProtectedLabReportUrlResult extends SignedUrlResult {
+  fileName?: string | null;
+}
+
 export const storageService = {
   /**
    * Upload a file to the lab_reports bucket
@@ -103,6 +107,52 @@ export const storageService = {
       return {
         url: null,
         error: 'An unexpected error occurred while generating the file URL.'
+      };
+    }
+  },
+
+  async getProtectedLabReportUrl(
+    reportId: string,
+    action: 'view' | 'download' = 'view'
+  ): Promise<ProtectedLabReportUrlResult> {
+    try {
+      const response = await fetch('/api/lab-reports/file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reportId,
+          action,
+        }),
+      });
+
+      const result = (await response.json()) as {
+        success?: boolean;
+        url?: string;
+        fileName?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !result.success || !result.url) {
+        return {
+          url: null,
+          fileName: null,
+          error: result.error || 'Failed to access the report file.',
+        };
+      }
+
+      return {
+        url: result.url,
+        fileName: result.fileName || null,
+        error: null,
+      };
+    } catch (error) {
+      console.error('Protected report URL error:', error);
+      return {
+        url: null,
+        fileName: null,
+        error: 'An unexpected error occurred while accessing the report file.',
       };
     }
   },

@@ -8,6 +8,9 @@ import {
   Bell,
   Search,
   LogOut,
+  Settings,
+  HelpCircle,
+  User,
   ChevronDown,
   Menu,
   X,
@@ -46,18 +49,22 @@ export default function Navbar({ onMenuToggle, isMobileSidebarOpen }: NavbarProp
   const [searchQuery, setSearchQuery] = useState('');
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const { theme, toggleTheme, mounted } = useTheme();
-  const { profile, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const unreadCount = staticNotifications.filter((n) => !n.read).length;
 
-  const displayName = profile?.name || 'Hospital Staff';
-  const displayRole = profile?.role || profile?.designation || 'Staff';
-  const displayHospitalId = profile?.hospital_id || 'N/A';
+  const displayName = user?.name || 'Hospital Staff';
+  const displayRole = user?.role || user?.designation || 'Staff';
+  const displayHospitalName = user?.hospital_name || 'Hospital not assigned';
   const avatarInitial = displayName.charAt(0).toUpperCase();
 
   const handleLogout = () => {
     logout();
     router.replace('/login');
+  };
+
+  const handleNavigate = (path: string) => {
+    router.push(path);
   };
 
   const getNotificationIcon = (type: string) => {
@@ -238,26 +245,51 @@ export default function Navbar({ onMenuToggle, isMobileSidebarOpen }: NavbarProp
                 <div className="flex flex-col">
                   <span className="font-medium">{displayName}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">
-                    {displayRole}
+                    {user?.email || 'Email not available'}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">
-                    Hospital ID: {displayHospitalId}
+                    {displayRole}
                   </span>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="dark:bg-slate-700" />
               <div className="px-2 py-2 text-xs text-slate-500 dark:text-slate-400">
-                <p>{profile?.designation || 'Designation not available'}</p>
-                <p>{profile?.department || 'Department not available'}</p>
-                <p>{profile?.phone || 'Phone not available'}</p>
+                <p>{displayHospitalName}</p>
+                <p>{user?.designation || 'Designation not available'}</p>
+                <p>{user?.department || 'Department not available'}</p>
               </div>
               <DropdownMenuSeparator className="dark:bg-slate-700" />
+              <DropdownMenuItem
+                className="gap-2 dark:text-white dark:focus:bg-slate-700"
+                onClick={() => handleNavigate('/profile')}
+              >
+                <User className="h-4 w-4" />
+                <span>My Profile</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="gap-2 dark:text-white dark:focus:bg-slate-700"
+                onClick={() => handleNavigate('/settings')}
+              >
+                <Settings className="h-4 w-4" />
+                <span>Account Settings</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="gap-2 dark:text-white dark:focus:bg-slate-700"
+                onClick={() => handleNavigate('/help')}
+              >
+                <HelpCircle className="h-4 w-4" />
+                <span>Help & Support</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="dark:bg-slate-700" />
+              <div className="px-2 pb-2 text-xs text-slate-500 dark:text-slate-400">
+                <p>{user?.phone || 'Phone not available'}</p>
+              </div>
               <DropdownMenuItem
                 className="gap-2 text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400 dark:focus:bg-slate-700"
                 onClick={handleLogout}
               >
                 <LogOut className="h-4 w-4" />
-                <span>Logout</span>
+                <span>Sign Out</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

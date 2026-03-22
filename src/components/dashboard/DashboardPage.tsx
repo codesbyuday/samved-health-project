@@ -6,6 +6,7 @@ import { PatientVisitsChart, DiseaseTrendsChart, BedOccupancyChart } from './Das
 import NotificationsPanel from './Notifications';
 import RecentActivityFeed from './RecentActivityFeed';
 import { dashboardService } from '@/services/database';
+import { useRBAC } from '@/hooks/use-rbac';
 import {
   CalendarDays,
   BedDouble,
@@ -43,14 +44,11 @@ interface DashboardStats {
 }
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
+  const { canAccessModule } = useRBAC();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadDashboardStats();
-  }, []);
 
   const loadDashboardStats = async () => {
     setIsLoading(true);
@@ -67,6 +65,20 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     
     setIsLoading(false);
   };
+
+  const handleNavigate = (page: PageType) => {
+    if (canAccessModule(page)) {
+      onNavigate(page);
+    }
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadDashboardStats();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   if (isLoading) {
     return (
@@ -128,7 +140,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           icon={<CalendarDays className="h-6 w-6" />}
           variant="primary"
           trend={stats?.appointmentsTrend}
-          onClick={() => onNavigate('patients')}
+          onClick={canAccessModule('patients') ? () => handleNavigate('patients') : undefined}
         />
         <SummaryCard
           title="Beds Available"
@@ -136,7 +148,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           icon={<BedDouble className="h-6 w-6" />}
           variant="success"
           description={`of ${stats?.totalBeds || 0} total beds`}
-          onClick={() => onNavigate('bed-management')}
+          onClick={canAccessModule('bed-management') ? () => handleNavigate('bed-management') : undefined}
         />
         <SummaryCard
           title="ICU Beds"
@@ -144,7 +156,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           icon={<Activity className="h-6 w-6" />}
           variant="warning"
           description="Available now"
-          onClick={() => onNavigate('bed-management')}
+          onClick={canAccessModule('bed-management') ? () => handleNavigate('bed-management') : undefined}
         />
         <SummaryCard
           title="Pending Lab Reports"
@@ -152,7 +164,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           icon={<FlaskConical className="h-6 w-6" />}
           variant="default"
           trend={stats?.labTrend}
-          onClick={() => onNavigate('lab-reports')}
+          onClick={canAccessModule('lab-reports') ? () => handleNavigate('lab-reports') : undefined}
         />
         <SummaryCard
           title="Pending Complaints"
@@ -160,7 +172,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           icon={<AlertTriangle className="h-6 w-6" />}
           variant="danger"
           trend={stats?.complaintsTrend}
-          onClick={() => onNavigate('complaints')}
+          onClick={canAccessModule('complaints') ? () => handleNavigate('complaints') : undefined}
         />
       </div>
 

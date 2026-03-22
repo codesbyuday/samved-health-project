@@ -62,10 +62,15 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import AccessDenied from '@/components/auth/AccessDenied';
+import { useRBAC } from '@/hooks/use-rbac';
 
 type BedFilter = 'all' | 'available' | 'occupied' | 'icu' | 'emergency' | 'maintenance';
 
 export default function BedManagement() {
+  const { getModuleAccess } = useRBAC();
+  const moduleAccess = getModuleAccess('bed-management');
+  const canManageBeds = moduleAccess === 'full';
   const [beds, setBeds] = useState<Bed[]>([]);
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [wards, setWards] = useState<HospitalWard[]>([]);
@@ -100,9 +105,27 @@ export default function BedManagement() {
   const [existingAssignment, setExistingAssignment] = useState<Bed | null>(null);
   const [isCheckingAssignment, setIsCheckingAssignment] = useState(false);
 
-  useEffect(() => {
-    loadData();
+  const loadData = useMemo(() => async () => {
+    setIsLoading(true);
+    const [bedsResult, hospitalsResult, wardsResult] = await Promise.all([
+      bedService.getAll(),
+      hospitalService.getAll(),
+      hospitalWardService.getAll(),
+    ]);
+    
+    if (bedsResult.data) setBeds(bedsResult.data);
+    if (hospitalsResult.data) setHospitals(hospitalsResult.data);
+    if (wardsResult.data) setWards(wardsResult.data);
+    setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   // Search citizens when query changes
   useEffect(() => {
@@ -118,20 +141,6 @@ export default function BedManagement() {
     }, 300);
     return () => clearTimeout(timer);
   }, [citizenSearch]);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    const [bedsResult, hospitalsResult, wardsResult] = await Promise.all([
-      bedService.getAll(),
-      hospitalService.getAll(),
-      hospitalWardService.getAll(),
-    ]);
-    
-    if (bedsResult.data) setBeds(bedsResult.data);
-    if (hospitalsResult.data) setHospitals(hospitalsResult.data);
-    if (wardsResult.data) setWards(wardsResult.data);
-    setIsLoading(false);
-  };
 
   // Calculate stats
   const stats = useMemo(() => ({
@@ -196,6 +205,10 @@ export default function BedManagement() {
 
   // Handlers
   const handleAddBed = async () => {
+    if (!canManageBeds) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!formData.bed_id.trim()) {
       toast.error('Bed ID is required');
       return;
@@ -219,6 +232,10 @@ export default function BedManagement() {
   };
 
   const handleUpdateBed = async () => {
+    if (!canManageBeds) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!selectedBed) return;
     setIsSubmitting(true);
     const { error } = await bedService.update(selectedBed.bed_id, {
@@ -238,6 +255,10 @@ export default function BedManagement() {
   };
 
   const handleAssignBed = async () => {
+    if (!canManageBeds) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!selectedBed || !selectedCitizenId) {
       toast.error('Please select a citizen');
       return;
@@ -267,12 +288,20 @@ export default function BedManagement() {
 
   // Open release confirmation dialog
   const openReleaseDialog = (bed: Bed) => {
+    if (!canManageBeds) {
+      toast.error('Access Denied');
+      return;
+    }
     setSelectedBed(bed);
     setShowReleaseDialog(true);
   };
 
   // Confirm and execute release
   const handleConfirmRelease = async () => {
+    if (!canManageBeds) {
+      toast.error('Access Denied');
+      return;
+    }
     if (!selectedBed) return;
     setIsSubmitting(true);
     const { error } = await bedService.releaseBed(selectedBed.bed_id);
@@ -287,6 +316,10 @@ export default function BedManagement() {
   };
 
   const openEditDialog = (bed: Bed) => {
+    if (!canManageBeds) {
+      toast.error('Access Denied');
+      return;
+    }
     setSelectedBed(bed);
     setFormData({
       bed_id: bed.bed_id,
@@ -304,6 +337,10 @@ export default function BedManagement() {
   };
 
   const openAssignDialog = (bed: Bed) => {
+    if (!canManageBeds) {
+      toast.error('Access Denied');
+      return;
+    }
     setSelectedBed(bed);
     setCitizenSearch('');
     setSelectedCitizenId('');
@@ -344,6 +381,10 @@ export default function BedManagement() {
     );
   }
 
+  if (moduleAccess === 'none') {
+    return <AccessDenied message="You do not have permission to access bed management." />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -356,9 +397,13 @@ export default function BedManagement() {
           <Button variant="outline" onClick={loadData}>
             <RefreshCw className="h-4 w-4 mr-2" />Refresh
           </Button>
-          <Button onClick={() => { setFormData({ bed_id: '', hospital_id: '', located_at: '', bed_type: 'general', bed_status: 'available' }); setShowAddDialog(true); }}>
-            <Plus className="h-4 w-4 mr-2" />Add Bed
-          </Button>
+          {canManageBeds ? (
+            <Button onClick={() => { setFormData({ bed_id: '', hospital_id: '', located_at: '', bed_type: 'general', bed_status: 'available' }); setShowAddDialog(true); }}>
+              <Plus className="h-4 w-4 mr-2" />Add Bed
+            </Button>
+          ) : (
+            <Badge variant="outline">View Only</Badge>
+          )}
         </div>
       </div>
 
@@ -516,11 +561,11 @@ export default function BedManagement() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="sm" onClick={() => openViewDialog(bed)}><Eye className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(bed)}><Edit className="h-4 w-4" /></Button>
-                        {bed.bed_status !== 'occupied' && (
+                        {canManageBeds ? <Button variant="ghost" size="sm" onClick={() => openEditDialog(bed)}><Edit className="h-4 w-4" /></Button> : null}
+                        {canManageBeds && bed.bed_status !== 'occupied' && (
                           <Button variant="ghost" size="sm" onClick={() => openAssignDialog(bed)}><UserPlus className="h-4 w-4" /></Button>
                         )}
-                        {bed.bed_status === 'occupied' && (
+                        {canManageBeds && bed.bed_status === 'occupied' && (
                           <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => openReleaseDialog(bed)}>Release</Button>
                         )}
                       </div>
@@ -534,7 +579,7 @@ export default function BedManagement() {
       </Card>
 
       {/* Add Bed Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={canManageBeds && showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add New Bed</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
@@ -585,7 +630,7 @@ export default function BedManagement() {
       </Dialog>
 
       {/* Edit Bed Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={(o) => { setShowEditDialog(o); if (!o) setSelectedBed(null); }}>
+      <Dialog open={canManageBeds && showEditDialog} onOpenChange={(o) => { setShowEditDialog(o); if (!o) setSelectedBed(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Bed</DialogTitle></DialogHeader>
           {selectedBed && <p className="text-sm text-slate-500 mb-4">Bed ID: {selectedBed.bed_id}</p>}
@@ -676,7 +721,7 @@ export default function BedManagement() {
       </Dialog>
 
       {/* Release Bed Confirmation Dialog */}
-      <Dialog open={showReleaseDialog} onOpenChange={(o) => { setShowReleaseDialog(o); if (!o) setSelectedBed(null); }}>
+      <Dialog open={canManageBeds && showReleaseDialog} onOpenChange={(o) => { setShowReleaseDialog(o); if (!o) setSelectedBed(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-red-600 flex items-center gap-2">
@@ -755,7 +800,7 @@ export default function BedManagement() {
       </Dialog>
 
       {/* Assign Citizen Dialog */}
-      <Dialog open={showAssignDialog} onOpenChange={(o) => { 
+      <Dialog open={canManageBeds && showAssignDialog} onOpenChange={(o) => { 
         setShowAssignDialog(o); 
         if (!o) { 
           setSelectedBed(null); 

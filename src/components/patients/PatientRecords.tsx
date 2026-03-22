@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,6 +54,8 @@ import {
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRBAC } from '@/hooks/use-rbac';
 import {
   citizenService,
   healthRecordService,
@@ -64,7 +66,6 @@ import {
   hospitalSearchService,
   doctorSearchService,
   diseaseSearchService,
-  referralService,
   type Citizen,
   type HealthRecord,
   type DiagnosticReport,
@@ -75,7 +76,7 @@ import {
   type Disease,
   type RecentPatient,
 } from '@/services/database';
-import { supabase } from '@/lib/supabase';
+import { storageService } from '@/services/storage';
 
 // Helper function to calculate age from date of birth
 function calculateAge(dateOfBirth: string | null): number | null {
@@ -121,6 +122,49 @@ interface ReportedDiseaseForm {
 }
 
 export default function PatientRecords() {
+  const { user } = useAuth();
+  const { hasPermission } = useRBAC();
+  const canAddTreatment = hasPermission('add_treatment');
+  const canEditHealthRecordFully = hasPermission('update_treatment_full');
+  const canEditHealthRecordNotes = hasPermission('update_treatment_limited');
+  const canEditHealthRecord = canEditHealthRecordFully || canEditHealthRecordNotes;
+  const canCreateReferral = hasPermission('create_referral');
+  const canManageDiseaseReporting = hasPermission('disease-reporting.manage');
+
+  const currentHospital = useMemo<Hospital | null>(() => {
+    if (!user?.hospital_id) return null;
+    return {
+      hospital_id: user.hospital_id,
+      name: user.hospital_name,
+      type: null,
+      address: user.address,
+      ward_id: null,
+      contact_number: user.phone,
+      email: user.email,
+      verified_by_smc: null,
+      created_at: user.joined_at || new Date().toISOString(),
+    };
+  }, [user]);
+
+  const currentStaff = useMemo<HospitalStaff | null>(() => {
+    if (!user?.staff_uuid) return null;
+    return {
+      staff_uuid: user.staff_uuid,
+      staff_id: user.staff_id,
+      hospital_id: user.hospital_id,
+      user_id: user.user_id,
+      name: user.name,
+      role: user.role,
+      designation: user.designation,
+      department: user.department,
+      phone: user.phone,
+      address: user.address,
+      shift: null,
+      status: null,
+      joined_at: user.joined_at || new Date().toISOString(),
+    };
+  }, [user]);
+
   // State for search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Citizen[]>([]);
@@ -156,17 +200,6 @@ export default function PatientRecords() {
   const [treatmentTab, setTreatmentTab] = useState<'health-record' | 'report-disease'>('health-record');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state for health record
-  const [hospitalSearch, setHospitalSearch] = useState('');
-  const [hospitalResults, setHospitalResults] = useState<Hospital[]>([]);
-  const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
-  const [isSearchingHospitals, setIsSearchingHospitals] = useState(false);
-
-  const [doctorSearch, setDoctorSearch] = useState('');
-  const [doctorResults, setDoctorResults] = useState<HospitalStaff[]>([]);
-  const [selectedDoctor, setSelectedDoctor] = useState<HospitalStaff | null>(null);
-  const [isSearchingDoctors, setIsSearchingDoctors] = useState(false);
-
   const [diagnosis, setDiagnosis] = useState('');
   const [prescription, setPrescription] = useState('');
   const [treatmentNotes, setTreatmentNotes] = useState('');
@@ -194,19 +227,16 @@ export default function PatientRecords() {
   const [editingDiseaseCase, setEditingDiseaseCase] = useState<DiseaseCase | null>(null);
   const [editSeverity, setEditSeverity] = useState('');
   const [editStatus, setEditStatus] = useState('');
+  const [showEditHealthRecordDialog, setShowEditHealthRecordDialog] = useState(false);
+  const [editingHealthRecord, setEditingHealthRecord] = useState<HealthRecord | null>(null);
+  const [editDiagnosis, setEditDiagnosis] = useState('');
+  const [editPrescription, setEditPrescription] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   // State for Refer Patient dialog
   const [showReferralDialog, setShowReferralDialog] = useState(false);
   // From Hospital (referring hospital)
   const [referralFromHospital, setReferralFromHospital] = useState<Hospital | null>(null);
-  const [referralFromHospitalSearch, setReferralFromHospitalSearch] = useState('');
-  const [referralFromHospitalResults, setReferralFromHospitalResults] = useState<Hospital[]>([]);
-  const [isSearchingReferralFromHospitals, setIsSearchingReferralFromHospitals] = useState(false);
-  // Referrer (staff from referring hospital)
-  const [referralReferrer, setReferralReferrer] = useState<HospitalStaff | null>(null);
-  const [referralReferrerSearch, setReferralReferrerSearch] = useState('');
-  const [referralReferrerResults, setReferralReferrerResults] = useState<HospitalStaff[]>([]);
-  const [isSearchingReferralReferrer, setIsSearchingReferralReferrer] = useState(false);
   // Destination Hospital
   const [referralDestinationHospital, setReferralDestinationHospital] = useState<Hospital | null>(null);
   const [referralDestinationHospitalSearch, setReferralDestinationHospitalSearch] = useState('');
@@ -351,136 +381,6 @@ export default function PatientRecords() {
     setRelatedDiseases(related);
   }, [diseaseCases]);
 
-  // Hospital search
-  useEffect(() => {
-    const searchHospitals = async () => {
-      if (!hospitalSearch.trim()) {
-        setHospitalResults([]);
-        return;
-      }
-      setIsSearchingHospitals(true);
-      try {
-        const { data, error } = await hospitalSearchService.search(hospitalSearch);
-        if (!error) {
-          setHospitalResults(data || []);
-        } else {
-          console.error('Hospital search error:', error);
-          setHospitalResults([]);
-        }
-      } catch (err) {
-        console.error('Hospital search error:', err);
-        setHospitalResults([]);
-      }
-      setIsSearchingHospitals(false);
-    };
-    const timer = setTimeout(searchHospitals, 300);
-    return () => clearTimeout(timer);
-  }, [hospitalSearch]);
-
-  // Doctor search - load all doctors when hospital is selected
-  useEffect(() => {
-    const searchDoctors = async () => {
-      if (!selectedHospital) {
-        setDoctorResults([]);
-        return;
-      }
-      setIsSearchingDoctors(true);
-      try {
-        // Use getAllByHospital if no search query, otherwise use search
-        const { data, error } = doctorSearch.trim()
-          ? await doctorSearchService.searchByHospital(selectedHospital.hospital_id, doctorSearch)
-          : await doctorSearchService.getAllByHospital(selectedHospital.hospital_id);
-        if (!error) {
-          setDoctorResults(data || []);
-        } else {
-          console.error('Doctor search error:', error);
-          setDoctorResults([]);
-        }
-      } catch (err) {
-        console.error('Doctor search error:', err);
-        setDoctorResults([]);
-      }
-      setIsSearchingDoctors(false);
-    };
-    const timer = setTimeout(searchDoctors, 300);
-    return () => clearTimeout(timer);
-  }, [doctorSearch, selectedHospital]);
-
-  // Referral - From Hospital search
-  useEffect(() => {
-    const searchFromHospitals = async () => {
-      if (!referralFromHospitalSearch.trim()) {
-        setReferralFromHospitalResults([]);
-        return;
-      }
-      setIsSearchingReferralFromHospitals(true);
-      try {
-        const { data, error } = await hospitalSearchService.search(referralFromHospitalSearch);
-        if (!error) {
-          setReferralFromHospitalResults(data || []);
-        } else {
-          console.error('From hospital search error:', error);
-          setReferralFromHospitalResults([]);
-        }
-      } catch (err) {
-        console.error('From hospital search error:', err);
-        setReferralFromHospitalResults([]);
-      }
-      setIsSearchingReferralFromHospitals(false);
-    };
-    const timer = setTimeout(searchFromHospitals, 300);
-    return () => clearTimeout(timer);
-  }, [referralFromHospitalSearch]);
-
-  // Referral - Referrer (staff) search with role filtering
-  useEffect(() => {
-    const searchReferrer = async () => {
-      if (!referralFromHospital) {
-        setReferralReferrerResults([]);
-        return;
-      }
-      setIsSearchingReferralReferrer(true);
-      try {
-        // Get all staff from hospital (not just doctors)
-        const { data, error } = await doctorSearchService.getAllStaffByHospital(referralFromHospital.hospital_id);
-        if (!error && data) {
-          // Filter by allowed roles: doctor, nurse, receptionist only
-          const allowedRoles = ['doctor', 'nurse', 'receptionist'];
-          let filteredData = data.filter((staff: HospitalStaff) => {
-            const designation = (staff.designation || '').toLowerCase();
-            const department = (staff.department || '').toLowerCase();
-            const role = (staff.role || '').toLowerCase();
-            return allowedRoles.some(allowedRole => 
-              designation.includes(allowedRole) || 
-              department.includes(allowedRole) ||
-              role.includes(allowedRole)
-            );
-          });
-          
-          // If there's a search query, further filter by name
-          if (referralReferrerSearch.trim()) {
-            const searchLower = referralReferrerSearch.toLowerCase();
-            filteredData = filteredData.filter((staff: HospitalStaff) => 
-              (staff.name || '').toLowerCase().includes(searchLower) ||
-              (staff.staff_id || '').toLowerCase().includes(searchLower)
-            );
-          }
-          
-          setReferralReferrerResults(filteredData);
-        } else {
-          console.error('Referrer search error:', error);
-          setReferralReferrerResults([]);
-        }
-      } catch (err) {
-        console.error('Referrer search error:', err);
-        setReferralReferrerResults([]);
-      }
-      setIsSearchingReferralReferrer(false);
-    };
-    
-    searchReferrer();
-  }, [referralReferrerSearch, referralFromHospital]);
-
   // Referral - Destination Hospital search
   useEffect(() => {
     const searchDestinationHospitals = async () => {
@@ -588,10 +488,6 @@ export default function PatientRecords() {
   // Open treatment dialog
   const openTreatmentDialog = () => {
     setTreatmentTab('health-record');
-    setHospitalSearch('');
-    setSelectedHospital(null);
-    setDoctorSearch('');
-    setSelectedDoctor(null);
     setDiagnosis('');
     setPrescription('');
     setTreatmentNotes('');
@@ -602,9 +498,6 @@ export default function PatientRecords() {
   // Open referral dialog
   const openReferralDialog = async () => {
     // Reset all fields first
-    setReferralReferrerSearch('');
-    setReferralReferrer(null);
-    setReferralReferrerResults([]);
     setReferralDestinationHospitalSearch('');
     setReferralDestinationHospital(null);
     setReferralDestinationHospitalResults([]);
@@ -614,31 +507,20 @@ export default function PatientRecords() {
     setReferralReason('');
     setReferralNotes('');
     setReferralUrgency('normal');
-    
-    // Auto-load hospital (for future auth integration)
-    // For now, load the first hospital - user can change it
-    try {
-      const { data: hospitals } = await hospitalSearchService.search('');
-      if (hospitals && hospitals.length > 0) {
-        setReferralFromHospital(hospitals[0]);
-        // Don't auto-select referrer - let user search and select
-      }
-    } catch (error) {
-      console.error('Error loading initial referral data:', error);
-    }
-    
+
+    setReferralFromHospital(currentHospital);
     setShowReferralDialog(true);
   };
 
   // Submit referral
   const handleSubmitReferral = async () => {
     if (!selectedCitizen) return;
-    if (!referralFromHospital) {
-      toast.error('Please select a referring hospital');
+    if (!canCreateReferral) {
+      toast.error('Access Denied');
       return;
     }
-    if (!referralReferrer) {
-      toast.error('Please select a referrer');
+    if (!currentHospital || !currentStaff) {
+      toast.error('Your staff profile is incomplete');
       return;
     }
     if (!referralDestinationHospital) {
@@ -652,19 +534,24 @@ export default function PatientRecords() {
 
     setIsSubmittingReferral(true);
     try {
-      const { error } = await referralService.create({
-        citizen_id: selectedCitizen.citizen_id,
-        referring_doctor_id: referralReferrer.staff_uuid,
-        from_hospital_id: referralFromHospital.hospital_id,
-        to_hospital_id: referralDestinationHospital.hospital_id,
-        to_doctor_id: referralDestinationDoctor?.staff_uuid || undefined,
-        referral_reason: referralReason,
-        urgency_level: referralUrgency,
-        notes: referralNotes || undefined,
+      const response = await fetch('/api/referrals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          citizen_id: selectedCitizen.citizen_id,
+          to_hospital_id: referralDestinationHospital.hospital_id,
+          to_doctor_id: referralDestinationDoctor?.staff_uuid || undefined,
+          referral_reason: referralReason,
+          urgency_level: referralUrgency,
+          notes: referralNotes || undefined,
+        }),
       });
+      const result = await response.json();
 
-      if (error) {
-        toast.error(error);
+      if (!response.ok || !result.success) {
+        toast.error(result.error || 'Failed to create referral');
       } else {
         toast.success('Patient referred successfully');
         setShowReferralDialog(false);
@@ -732,12 +619,12 @@ export default function PatientRecords() {
   // Submit treatment record
   const handleSubmitTreatment = async () => {
     if (!selectedCitizen) return;
-    if (!selectedHospital) {
-      toast.error('Please select a hospital');
+    if (!canAddTreatment) {
+      toast.error('Access Denied');
       return;
     }
-    if (!selectedDoctor) {
-      toast.error('Please select a doctor');
+    if (!currentHospital || !currentStaff) {
+      toast.error('Your staff profile is incomplete');
       return;
     }
     if (!diagnosis.trim()) {
@@ -747,36 +634,24 @@ export default function PatientRecords() {
 
     setIsSubmitting(true);
     try {
-      // Create health record
-      const { data: healthRecord, error: healthError } = await healthRecordService.create({
-        citizen_id: selectedCitizen.citizen_id,
-        hospital_id: selectedHospital.hospital_id,
-        staff_id: selectedDoctor.staff_uuid,
-        diagnosis: diagnosis,
-        prescription: prescription || null,
-        notes: treatmentNotes || null,
-        visit_date: new Date().toISOString().split('T')[0],
-      });
-
-      if (healthError) throw new Error(healthError);
-      if (!healthRecord) throw new Error('Failed to create health record');
-
-      // Create disease cases if any
-      for (const disease of reportedDiseases) {
-        const { error: diseaseError } = await diseaseService.create({
-          hospital_id: selectedHospital.hospital_id,
+      const response = await fetch('/api/health-records', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           citizen_id: selectedCitizen.citizen_id,
-          disease_id: disease.disease_id,
-          severity: disease.severity,
-          status: disease.status,
-          report_date: new Date().toISOString().split('T')[0],
-          reported_by: selectedDoctor.staff_uuid,
-        });
-        
-        if (diseaseError) {
-          console.error('Error creating disease case:', diseaseError);
-          toast.error(`Failed to report disease: ${disease.disease_name}`);
-        }
+          diagnosis,
+          prescription: prescription || null,
+          notes: treatmentNotes || null,
+          visit_date: new Date().toISOString().split('T')[0],
+          reportedDiseases: canManageDiseaseReporting ? reportedDiseases : [],
+        }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to create health record');
       }
 
       toast.success('Treatment record added successfully');
@@ -791,6 +666,10 @@ export default function PatientRecords() {
 
   // Edit disease case
   const handleEditDiseaseCase = (diseaseCase: DiseaseCase) => {
+    if (!canEditHealthRecord) {
+      toast.error('Access Denied');
+      return;
+    }
     if (diseaseCase.status === 'recovered') {
       toast.error('Cannot edit recovered disease cases');
       return;
@@ -806,36 +685,100 @@ export default function PatientRecords() {
     if (!editingDiseaseCase) return;
     
     setIsSubmitting(true);
-    const { error } = await diseaseService.update(editingDiseaseCase.case_id, {
-      severity: editSeverity,
-      status: editStatus,
-    });
-    
-    if (error) {
-      toast.error(error);
-    } else {
-      toast.success('Disease case updated');
-      setShowEditDiseaseDialog(false);
-      if (selectedCitizen) {
-        loadCitizenData(selectedCitizen.citizen_id);
+    try {
+      const response = await fetch(`/api/disease-cases/${editingDiseaseCase.case_id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...(canEditHealthRecordFully ? { severity: editSeverity } : {}),
+          status: editStatus,
+        }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        toast.error(result.error || 'Failed to update disease case');
+      } else {
+        toast.success('Disease case updated');
+        setShowEditDiseaseDialog(false);
+        if (selectedCitizen) {
+          loadCitizenData(selectedCitizen.citizen_id);
+        }
       }
+    } catch (error) {
+      toast.error('Failed to update disease case');
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
-  // Get signed URL for lab report
-  const getSignedUrl = async (path: string): Promise<string | null> => {
+  const handleEditHealthRecord = (record: HealthRecord) => {
+    if (!canEditHealthRecord) {
+      toast.error('Access Denied');
+      return;
+    }
+
+    setEditingHealthRecord(record);
+    setEditDiagnosis(record.diagnosis || '');
+    setEditPrescription(record.prescription || '');
+    setEditNotes(record.notes || '');
+    setShowEditHealthRecordDialog(true);
+  };
+
+  const handleSaveHealthRecord = async () => {
+    if (!editingHealthRecord) return;
+    if (canEditHealthRecordFully && !editDiagnosis.trim()) {
+      toast.error('Diagnosis is required');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.storage
-        .from('lab_reports')
-        .createSignedUrl(path, 3600);
-      
-      if (error) throw error;
-      return data?.signedUrl || null;
+      const response = await fetch(`/api/health-records/${editingHealthRecord.record_id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(
+          canEditHealthRecordFully
+            ? {
+                diagnosis: editDiagnosis,
+                prescription: editPrescription,
+                notes: editNotes,
+              }
+            : {
+                notes: editNotes,
+              }
+        ),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        toast.error(result.error || 'Failed to update health record');
+      } else {
+        toast.success('Health record updated');
+        setShowEditHealthRecordDialog(false);
+        setEditingHealthRecord(null);
+        if (selectedCitizen) {
+          loadCitizenData(selectedCitizen.citizen_id);
+        }
+      }
     } catch (error) {
-      console.error('Error getting signed URL:', error);
+      toast.error('Failed to update health record');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getProtectedReportUrl = async (reportId: string, action: 'view' | 'download') => {
+    const result = await storageService.getProtectedLabReportUrl(reportId, action);
+    if (result.error || !result.url) {
+      toast.error(result.error || 'Failed to access report file');
       return null;
     }
+    return result;
   };
 
   // Handle view lab report
@@ -844,12 +787,10 @@ export default function PatientRecords() {
       toast.error('No report file available');
       return;
     }
-    
-    const signedUrl = await getSignedUrl(report.report_file_url);
-    if (signedUrl) {
-      window.open(signedUrl, '_blank');
-    } else {
-      toast.error('Failed to get report URL');
+
+    const result = await getProtectedReportUrl(report.report_id, 'view');
+    if (result?.url) {
+      window.open(result.url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -859,17 +800,15 @@ export default function PatientRecords() {
       toast.error('No report file available');
       return;
     }
-    
-    const signedUrl = await getSignedUrl(report.report_file_url);
-    if (signedUrl) {
+
+    const result = await getProtectedReportUrl(report.report_id, 'download');
+    if (result?.url) {
       const a = document.createElement('a');
-      a.href = signedUrl;
-      a.download = `report_${report.report_id}.pdf`;
+      a.href = result.url;
+      a.download = result.fileName || `report_${report.report_id}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-    } else {
-      toast.error('Failed to download report');
     }
   };
 
@@ -1075,21 +1014,30 @@ export default function PatientRecords() {
 
               {/* Action Buttons */}
               <div className="pt-4 space-y-2">
-                <Button 
-                  className="w-full gap-2" 
-                  onClick={openTreatmentDialog}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Treatment Record
-                </Button>
-                <Button 
-                  variant="outline"
-                  className="w-full gap-2" 
-                  onClick={openReferralDialog}
-                >
-                  <ArrowRightLeft className="h-4 w-4" />
-                  Refer Patient
-                </Button>
+                {canAddTreatment ? (
+                  <Button 
+                    className="w-full gap-2" 
+                    onClick={openTreatmentDialog}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Treatment Record
+                  </Button>
+                ) : null}
+                {canCreateReferral ? (
+                  <Button 
+                    variant="outline"
+                    className="w-full gap-2" 
+                    onClick={openReferralDialog}
+                  >
+                    <ArrowRightLeft className="h-4 w-4" />
+                    Refer Patient
+                  </Button>
+                ) : null}
+                {!canAddTreatment && !canCreateReferral ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 p-3 text-sm text-slate-500">
+                    You have view-only access to this patient profile.
+                  </div>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -1149,19 +1097,31 @@ export default function PatientRecords() {
                                   </span>
                                 </div>
                               </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedHealthRecord(record);
-                                  if (record.visit_date) {
-                                    loadRelatedDiseases(record.visit_date);
-                                  }
-                                }}
-                              >
-                                <Eye className="h-4 w-4 mr-1" />
-                                View
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedHealthRecord(record);
+                                    if (record.visit_date) {
+                                      loadRelatedDiseases(record.visit_date);
+                                    }
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View
+                                </Button>
+                                {canEditHealthRecord ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleEditHealthRecord(record)}
+                                  >
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
                         ))
@@ -1646,6 +1606,82 @@ export default function PatientRecords() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={showEditHealthRecordDialog}
+        onOpenChange={(open) => {
+          setShowEditHealthRecordDialog(open);
+          if (!open) {
+            setEditingHealthRecord(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit Health Record</DialogTitle>
+            <DialogDescription>
+              {canEditHealthRecordFully
+                ? 'Doctors can update diagnosis, prescription, and notes.'
+                : 'Nurses can update treatment notes only.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-slate-50 p-4 space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-primary" />
+                <span className="text-slate-500">Hospital:</span>
+                <span className="font-medium text-slate-800">{currentHospital?.name || 'N/A'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-primary" />
+                <span className="text-slate-500">Updated by:</span>
+                <span className="font-medium text-slate-800">
+                  {currentStaff?.name || 'N/A'}
+                  {currentStaff?.designation ? ` (${currentStaff.designation})` : ''}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Diagnosis</Label>
+              <Textarea
+                value={editDiagnosis}
+                onChange={(e) => setEditDiagnosis(e.target.value)}
+                rows={3}
+                disabled={!canEditHealthRecordFully}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Prescription</Label>
+              <Textarea
+                value={editPrescription}
+                onChange={(e) => setEditPrescription(e.target.value)}
+                rows={3}
+                disabled={!canEditHealthRecordFully}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Treatment Notes</Label>
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditHealthRecordDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveHealthRecord} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Disease Case Detail Dialog */}
       <Dialog open={!!selectedDiseaseCase} onOpenChange={() => setSelectedDiseaseCase(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh]">
@@ -1772,130 +1808,47 @@ export default function PatientRecords() {
             </DialogDescription>
           </DialogHeader>
           
-          <Tabs value={treatmentTab} onValueChange={(v) => setTreatmentTab(v as 'health-record' | 'report-disease')} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs
+            value={treatmentTab}
+            onValueChange={(v) => {
+              if (v === 'report-disease' && !canManageDiseaseReporting) {
+                toast.error('Only doctors can report diseases from this form');
+                return;
+              }
+              setTreatmentTab(v as 'health-record' | 'report-disease');
+            }}
+            className="w-full"
+          >
+            <TabsList className={cn('grid w-full', canManageDiseaseReporting ? 'grid-cols-2' : 'grid-cols-1')}>
               <TabsTrigger value="health-record">Health Record Details</TabsTrigger>
-              <TabsTrigger value="report-disease">Report Disease</TabsTrigger>
+              {canManageDiseaseReporting ? (
+                <TabsTrigger value="report-disease">Report Disease</TabsTrigger>
+              ) : null}
             </TabsList>
             
             <ScrollArea className="max-h-[50vh] mt-4">
               {/* Health Record Tab */}
               <TabsContent value="health-record" className="space-y-4 pr-4">
-                {/* Hospital Search */}
                 <div className="space-y-2">
-                  <Label>Hospital Name *</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      placeholder="Search hospital by name or ID..."
-                      value={selectedHospital ? selectedHospital.name || '' : hospitalSearch}
-                      onChange={(e) => {
-                        setHospitalSearch(e.target.value);
-                        setSelectedHospital(null);
-                      }}
-                      className="pl-10"
-                      disabled={!!selectedHospital}
-                    />
-                    {isSearchingHospitals && (
-                      <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-                    )}
-                  </div>
-                  {hospitalResults.length > 0 && !selectedHospital && (
-                    <div className="border rounded-lg divide-y max-h-40 overflow-auto">
-                      {hospitalResults.map((hospital) => (
-                        <button
-                          key={hospital.hospital_id}
-                          className="w-full flex items-center gap-3 p-2 hover:bg-slate-50 text-left"
-                          onClick={() => {
-                            setSelectedHospital(hospital);
-                            setHospitalSearch('');
-                            setSelectedDoctor(null);
-                            setDoctorSearch('');
-                          }}
-                        >
-                          <Building2 className="h-4 w-4 text-slate-400" />
-                          <div>
-                            <p className="font-medium text-sm">{hospital.name}</p>
-                            <p className="text-xs text-slate-500">{hospital.hospital_id}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {selectedHospital && (
-                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <Label>Auto-Filled Details</Label>
+                  <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
                       <Building2 className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">{selectedHospital.name}</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="ml-auto h-6 px-2"
-                        onClick={() => {
-                          setSelectedHospital(null);
-                          setDoctorSearch('');
-                          setSelectedDoctor(null);
-                        }}
-                      >
-                        Change
-                      </Button>
+                      <span className="text-slate-500">Hospital:</span>
+                      <span className="font-medium text-slate-800">{currentHospital?.name || 'N/A'}</span>
                     </div>
-                  )}
-                </div>
-
-                {/* Doctor Search */}
-                <div className="space-y-2">
-                  <Label>Doctor Name *</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      placeholder={selectedHospital ? "Search doctor by name or staff ID..." : "Select hospital first"}
-                      value={selectedDoctor ? selectedDoctor.name || '' : doctorSearch}
-                      onChange={(e) => {
-                        setDoctorSearch(e.target.value);
-                        setSelectedDoctor(null);
-                      }}
-                      className="pl-10"
-                      disabled={!selectedHospital || !!selectedDoctor}
-                    />
-                    {isSearchingDoctors && (
-                      <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-                    )}
-                  </div>
-                  {doctorResults.length > 0 && !selectedDoctor && (
-                    <div className="border rounded-lg divide-y max-h-40 overflow-auto">
-                      {doctorResults.map((doctor) => (
-                        <button
-                          key={doctor.staff_uuid}
-                          className="w-full flex items-center gap-3 p-2 hover:bg-slate-50 text-left"
-                          onClick={() => {
-                            setSelectedDoctor(doctor);
-                            setDoctorSearch('');
-                          }}
-                        >
-                          <UserCheck className="h-4 w-4 text-slate-400" />
-                          <div>
-                            <p className="font-medium text-sm">{doctor.name}</p>
-                            <p className="text-xs text-slate-500">{doctor.staff_id} - {doctor.department}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {selectedDoctor && (
-                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2 text-sm">
                       <UserCheck className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">{selectedDoctor.name}</span>
-                      <span className="text-xs text-slate-500">({selectedDoctor.department})</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="ml-auto h-6 px-2"
-                        onClick={() => setSelectedDoctor(null)}
-                      >
-                        Change
-                      </Button>
+                      <span className="text-slate-500">Recorded by:</span>
+                      <span className="font-medium text-slate-800">
+                        {currentStaff?.name || 'N/A'}
+                        {currentStaff?.designation ? ` (${currentStaff.designation})` : ''}
+                      </span>
                     </div>
-                  )}
+                    <p className="text-xs text-slate-500">
+                      Hospital and staff details are inserted automatically from your logged-in profile.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Diagnosis */}
@@ -2234,25 +2187,29 @@ export default function PatientRecords() {
           <DialogHeader>
             <DialogTitle>Edit Disease Case</DialogTitle>
             <DialogDescription>
-              Update severity and status for {editingDiseaseCase?.disease?.disease_name}
+              {canEditHealthRecordFully
+                ? `Update severity and status for ${editingDiseaseCase?.disease?.disease_name}`
+                : `Update disease status for ${editingDiseaseCase?.disease?.disease_name}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Severity</Label>
-              <Select value={editSeverity} onValueChange={setEditSeverity}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SEVERITY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {canEditHealthRecordFully ? (
+              <div className="space-y-2">
+                <Label>Severity</Label>
+                <Select value={editSeverity} onValueChange={setEditSeverity}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEVERITY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={editStatus} onValueChange={setEditStatus}>
@@ -2297,142 +2254,26 @@ export default function PatientRecords() {
           
           <ScrollArea className="max-h-[55vh]">
             <div className="space-y-4 pr-4">
-              {/* From Hospital (Referring Hospital) */}
               <div className="space-y-2">
-                <Label>Referring Hospital *</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    placeholder="Search hospital by name..."
-                    value={referralFromHospital ? referralFromHospital.name || '' : referralFromHospitalSearch}
-                    onChange={(e) => {
-                      setReferralFromHospitalSearch(e.target.value);
-                      setReferralFromHospital(null);
-                      setReferralReferrer(null);
-                      setReferralReferrerSearch('');
-                    }}
-                    className="pl-10"
-                    disabled={!!referralFromHospital}
-                  />
-                  {isSearchingReferralFromHospitals && (
-                    <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-                  )}
+                <Label>Auto-Filled Referral Source</Label>
+                <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span className="text-slate-500">Referring Hospital:</span>
+                    <span className="font-medium text-slate-800">{currentHospital?.name || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <UserCheck className="h-4 w-4 text-primary" />
+                    <span className="text-slate-500">Referrer:</span>
+                    <span className="font-medium text-slate-800">
+                      {currentStaff?.name || 'N/A'}
+                      {currentStaff?.designation ? ` (${currentStaff.designation})` : ''}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Referring hospital and staff are inserted automatically from your current login session.
+                  </p>
                 </div>
-                {referralFromHospitalResults.length > 0 && !referralFromHospital && (
-                  <div className="border rounded-lg divide-y max-h-40 overflow-auto">
-                    {referralFromHospitalResults.map((hospital) => (
-                      <button
-                        key={hospital.hospital_id}
-                        className="w-full flex items-center gap-3 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-left"
-                        onClick={() => {
-                          setReferralFromHospital(hospital);
-                          setReferralFromHospitalSearch('');
-                          setReferralFromHospitalResults([]);
-                          setReferralReferrer(null);
-                          setReferralReferrerSearch('');
-                        }}
-                      >
-                        <Building2 className="h-4 w-4 text-slate-400" />
-                        <div>
-                          <p className="font-medium text-sm">{hospital.name}</p>
-                          <p className="text-xs text-slate-500">{hospital.hospital_id}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {referralFromHospital && (
-                  <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <Building2 className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{referralFromHospital.name}</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="ml-auto h-6 px-2"
-                      onClick={() => {
-                        setReferralFromHospital(null);
-                        setReferralFromHospitalSearch('');
-                        setReferralReferrer(null);
-                        setReferralReferrerSearch('');
-                      }}
-                    >
-                      Change
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Referrer (Staff) */}
-              <div className="space-y-2">
-                <Label>Referrer (Staff) *</Label>
-                <p className="text-xs text-slate-500">Select doctor, nurse, or receptionist from {referralFromHospital?.name || 'hospital'}</p>
-                
-                {!referralReferrer ? (
-                  <>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input
-                        placeholder={referralFromHospital ? "Type to search staff name..." : "Select hospital first"}
-                        value={referralReferrerSearch}
-                        onChange={(e) => setReferralReferrerSearch(e.target.value)}
-                        className="pl-10"
-                        disabled={!referralFromHospital}
-                      />
-                      {isSearchingReferralReferrer && (
-                        <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-                      )}
-                    </div>
-                    {referralReferrerResults.length > 0 && referralFromHospital && (
-                      <div className="border rounded-lg divide-y max-h-48 overflow-auto">
-                        {referralReferrerResults.map((staff) => (
-                          <button
-                            key={staff.staff_uuid}
-                            type="button"
-                            className="w-full flex items-center gap-3 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-left"
-                            onClick={() => {
-                              setReferralReferrer(staff);
-                              setReferralReferrerSearch('');
-                            }}
-                          >
-                            <UserCheck className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{staff.name}</p>
-                              <p className="text-xs text-slate-500 truncate">
-                                {staff.designation || staff.role || 'Staff'}
-                                {staff.department && ` - ${staff.department}`}
-                              </p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {referralFromHospital && referralReferrerSearch && referralReferrerResults.length === 0 && !isSearchingReferralReferrer && (
-                      <p className="text-xs text-slate-400">No matching staff found</p>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                    <UserCheck className="h-5 w-5 text-green-600 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-green-700 dark:text-green-300 truncate">{referralReferrer.name}</p>
-                      <p className="text-xs text-green-600 dark:text-green-400">
-                        {referralReferrer.designation || referralReferrer.role || 'Staff'}
-                        {referralReferrer.department && ` - ${referralReferrer.department}`}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        setReferralReferrer(null);
-                        setReferralReferrerSearch('');
-                      }}
-                    >
-                      Change
-                    </Button>
-                  </div>
-                )}
               </div>
 
               {/* Separator */}
@@ -2608,7 +2449,7 @@ export default function PatientRecords() {
             </Button>
             <Button 
               onClick={handleSubmitReferral} 
-              disabled={isSubmittingReferral || !referralFromHospital || !referralReferrer || !referralDestinationHospital || !referralReason.trim()}
+              disabled={isSubmittingReferral || !currentHospital || !currentStaff || !referralDestinationHospital || !referralReason.trim()}
             >
               {isSubmittingReferral && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <ArrowRightLeft className="h-4 w-4 mr-2" />

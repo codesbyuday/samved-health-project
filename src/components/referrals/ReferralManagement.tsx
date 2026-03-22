@@ -39,6 +39,8 @@ import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { referralService } from '@/services/database';
+import AccessDenied from '@/components/auth/AccessDenied';
+import { useRBAC } from '@/hooks/use-rbac';
 
 // Referral type
 interface Referral {
@@ -110,6 +112,10 @@ const getStatusColor = (status: string): string => {
 };
 
 export default function ReferralManagement() {
+  const { getModuleAccess } = useRBAC();
+  const moduleAccess = getModuleAccess('referrals');
+  const canManageReferrals = moduleAccess === 'full';
+  const canApproveReferrals = moduleAccess === 'full' || moduleAccess === 'partial';
   // State
   const [activeTab, setActiveTab] = useState<'outgoing' | 'incoming'>('outgoing');
   const [outgoingReferrals, setOutgoingReferrals] = useState<Referral[]>([]);
@@ -154,6 +160,10 @@ export default function ReferralManagement() {
 
   // Handle accept referral
   const handleAccept = async (referralId: string) => {
+    if (!canApproveReferrals) {
+      toast.error('Access Denied');
+      return;
+    }
     setIsUpdating(true);
     try {
       const { error } = await referralService.updateStatus(referralId, 'accepted');
@@ -173,6 +183,10 @@ export default function ReferralManagement() {
 
   // Handle reject referral
   const handleReject = async (referralId: string) => {
+    if (!canApproveReferrals) {
+      toast.error('Access Denied');
+      return;
+    }
     setIsUpdating(true);
     try {
       const { error } = await referralService.updateStatus(referralId, 'rejected');
@@ -189,6 +203,10 @@ export default function ReferralManagement() {
       setIsUpdating(false);
     }
   };
+
+  if (moduleAccess === 'none') {
+    return <AccessDenied message="You do not have permission to access referrals." />;
+  }
 
   // Render referral card
   const renderReferralCard = (referral: Referral, isIncoming: boolean) => {
@@ -252,7 +270,7 @@ export default function ReferralManagement() {
               </Badge>
 
               {/* Action buttons for incoming pending referrals */}
-              {isIncoming && referral.status === 'pending' && (
+              {canApproveReferrals && isIncoming && referral.status === 'pending' && (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -386,11 +404,15 @@ export default function ReferralManagement() {
               </div>
               <div className="flex flex-col items-end gap-2">
                 <Badge className={cn('text-white border-0', getStatusColor(selectedReferral?.status || ''))}>
-                  {selectedReferral?.status?.charAt(0).toUpperCase() + selectedReferral?.status?.slice(1)}
+                  {selectedReferral?.status
+                    ? `${selectedReferral.status.charAt(0).toUpperCase()}${selectedReferral.status.slice(1)}`
+                    : 'Unknown'}
                 </Badge>
                 <Badge className={cn('text-white border-0', getUrgencyColor(selectedReferral?.urgency_level || ''))}>
                   {selectedReferral?.urgency_level === 'emergency' && <AlertTriangle className="h-3 w-3 mr-1" />}
-                  {selectedReferral?.urgency_level?.charAt(0).toUpperCase() + selectedReferral?.urgency_level?.slice(1)} Priority
+                  {selectedReferral?.urgency_level
+                    ? `${selectedReferral.urgency_level.charAt(0).toUpperCase()}${selectedReferral.urgency_level.slice(1)}`
+                    : 'Unknown'} Priority
                 </Badge>
               </div>
             </div>
@@ -597,7 +619,7 @@ export default function ReferralManagement() {
           </ScrollArea>
 
           {/* Footer Actions */}
-          {activeTab === 'incoming' && selectedReferral?.status === 'pending' && (
+          {canApproveReferrals && activeTab === 'incoming' && selectedReferral?.status === 'pending' && (
             <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-lg">
               <div className="flex gap-3">
                 <Button

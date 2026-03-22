@@ -3,7 +3,13 @@ import type { NextRequest } from "next/server";
 import { AUTH_COOKIE_NAME, decodeSession } from "@/lib/auth";
 
 export function middleware(request: NextRequest) {
-  if (!request.nextUrl.pathname.startsWith("/dashboard")) {
+  const protectedPaths = ["/dashboard", "/profile", "/settings", "/help"];
+  const isProtectedPath = protectedPaths.some(
+    (path) =>
+      request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(`${path}/`)
+  );
+
+  if (!isProtectedPath) {
     return NextResponse.next();
   }
 
@@ -20,5 +26,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/profile/:path*", "/settings/:path*", "/help/:path*"],
 };

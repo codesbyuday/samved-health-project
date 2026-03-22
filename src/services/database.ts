@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase';
+import { USER_SESSION_KEY, type UserProfile } from '@/lib/auth';
+import { getModuleAccess, hasHospitalAccess, type ModuleKey } from '@/lib/rbac';
 
 // =====================
 // Error Handling Utility
@@ -140,6 +142,53 @@ export function parseErrorMessage(error: unknown): string {
   }
   
   return 'An unexpected error occurred. Please try again.';
+}
+
+interface ClientScope {
+  role: string | null;
+  hospitalId: string | null;
+}
+
+function getClientScope(): ClientScope | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const storedUser = window.localStorage.getItem(USER_SESSION_KEY);
+
+  if (!storedUser) {
+    return null;
+  }
+
+  try {
+    const user = JSON.parse(storedUser) as UserProfile;
+    return {
+      role: user.role,
+      hospitalId: user.hospital_id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getScopedHospitalId(moduleKey: ModuleKey, write = false): { hospitalId: string | null; error: string | null } {
+  const scope = getClientScope();
+
+  if (!scope?.hospitalId) {
+    return { hospitalId: null, error: 'Access Denied' };
+  }
+
+  const access = getModuleAccess(scope.role, moduleKey);
+
+  if (write ? access === 'full' || access === 'partial' : access !== 'none') {
+    return { hospitalId: scope.hospitalId, error: null };
+  }
+
+  return { hospitalId: null, error: 'Access Denied' };
+}
+
+function ensureHospitalOwnership(userHospitalId: string | null, recordHospitalId: string | null) {
+  return hasHospitalAccess(userHospitalId, recordHospitalId);
 }
 
 // =====================
@@ -558,9 +607,13 @@ export const citizenService = {
 export const hospitalService = {
   async getAll(): Promise<{ data: Hospital[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('citizen-services');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospitals')
         .select('*')
+        .eq('hospital_id', hospitalId)
         .order('name');
       
       if (error) throw error;
@@ -572,6 +625,11 @@ export const hospitalService = {
 
   async getById(hospitalId: string): Promise<{ data: Hospital | null; error: string | null }> {
     try {
+      const scoped = getScopedHospitalId('citizen-services');
+      if (scoped.error || !scoped.hospitalId || !ensureHospitalOwnership(scoped.hospitalId, hospitalId)) {
+        return { data: null, error: 'Access Denied' };
+      }
+
       const { data, error } = await supabase
         .from('hospitals')
         .select('*')
@@ -587,10 +645,13 @@ export const hospitalService = {
 
   async getFirst(): Promise<{ data: Hospital | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('citizen-services');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospitals')
         .select('*')
-        .limit(1)
+        .eq('hospital_id', hospitalId)
         .single();
       
       if (error) throw error;
@@ -701,6 +762,9 @@ export const doctorService = {
 export const appointmentService = {
   async getAll(): Promise<{ data: Appointment[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('appointments');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       // First, fetch all appointments with basic relations
       const { data, error } = await supabase
         .from('appointments')
@@ -710,6 +774,7 @@ export const appointmentService = {
           hospitals (*),
           hospital_wards (*)
         `)
+        .eq('hospital_id', hospitalId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -781,6 +846,9 @@ export const appointmentService = {
 
   async getByDate(date: string): Promise<{ data: Appointment[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('appointments');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('appointments')
         .select(`
@@ -790,6 +858,7 @@ export const appointmentService = {
           hospital_wards (*)
         `)
         .eq('appointment_date', date)
+        .eq('hospital_id', hospitalId)
         .order('time_slot');
       
       if (error) throw error;
@@ -865,9 +934,18 @@ export const appointmentService = {
 
   async create(appointment: Partial<Appointment>): Promise<{ data: Appointment | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('appointments', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+      if (appointment.hospital_id && !ensureHospitalOwnership(hospitalId, appointment.hospital_id)) {
+        return { data: null, error: 'Access Denied' };
+      }
+
       const { data, error } = await supabase
         .from('appointments')
-        .insert(appointment)
+        .insert({
+          ...appointment,
+          hospital_id: hospitalId,
+        })
         .select()
         .single();
       
@@ -880,10 +958,14 @@ export const appointmentService = {
 
   async update(appointmentId: string, updates: Partial<Appointment>): Promise<{ data: Appointment | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('appointments', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('appointments')
         .update(updates)
         .eq('appointment_id', appointmentId)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -896,11 +978,15 @@ export const appointmentService = {
 
   async countToday(): Promise<{ count: number; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('appointments');
+      if (scopeError || !hospitalId) return { count: 0, error: scopeError || 'Access Denied' };
+
       const today = new Date().toISOString().split('T')[0];
       const { count, error } = await supabase
         .from('appointments')
         .select('*', { count: 'exact', head: true })
-        .eq('appointment_date', today);
+        .eq('appointment_date', today)
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       return { count: count || 0, error: null };
@@ -917,6 +1003,9 @@ export const appointmentService = {
 export const bedService = {
   async getAll(): Promise<{ data: Bed[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('bed-management');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('beds')
         .select(`
@@ -925,6 +1014,7 @@ export const bedService = {
           hospitals (*),
           hospital_wards (*)
         `)
+        .eq('hospital_id', hospitalId)
         .order('bed_id');
       
       if (error) throw error;
@@ -944,6 +1034,9 @@ export const bedService = {
 
   async getByStatus(status: string): Promise<{ data: Bed[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('bed-management');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('beds')
         .select(`
@@ -953,6 +1046,7 @@ export const bedService = {
           hospital_wards (*)
         `)
         .eq('bed_status', status)
+        .eq('hospital_id', hospitalId)
         .order('bed_id');
       
       if (error) throw error;
@@ -972,6 +1066,9 @@ export const bedService = {
 
   async getById(bedId: string): Promise<{ data: Bed | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('bed-management');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('beds')
         .select(`
@@ -981,6 +1078,7 @@ export const bedService = {
           hospital_wards (*)
         `)
         .eq('bed_id', bedId)
+        .eq('hospital_id', hospitalId)
         .single();
       
       if (error) throw error;
@@ -1000,10 +1098,14 @@ export const bedService = {
 
   async create(bed: Partial<Bed>): Promise<{ data: Bed | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('bed-management', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('beds')
         .insert({
           ...bed,
+          hospital_id: hospitalId,
           last_updated_on: new Date().toISOString()
         })
         .select()
@@ -1018,6 +1120,9 @@ export const bedService = {
 
   async update(bedId: string, updates: Partial<Bed>): Promise<{ data: Bed | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('bed-management', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('beds')
         .update({
@@ -1025,6 +1130,7 @@ export const bedService = {
           last_updated_on: new Date().toISOString()
         })
         .eq('bed_id', bedId)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -1065,23 +1171,28 @@ export const bedService = {
     error: string | null 
   }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('bed-management');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('beds')
-        .select('bed_status, bed_type');
+        .select('bed_status, bed_type, hospital_id');
+      
+      const scopedData = data?.filter((bed: any) => bed.hospital_id === hospitalId) || [];
       
       if (error) throw error;
       
       const stats = {
-        total: data?.length || 0,
-        occupied: data?.filter(b => b.bed_status === 'occupied').length || 0,
-        available: data?.filter(b => b.bed_status === 'available').length || 0,
-        maintenance: data?.filter(b => b.bed_status === 'maintenance').length || 0,
-        icuTotal: data?.filter(b => b.bed_type === 'icu').length || 0,
-        icuOccupied: data?.filter(b => b.bed_type === 'icu' && b.bed_status === 'occupied').length || 0,
-        icuAvailable: data?.filter(b => b.bed_type === 'icu' && b.bed_status === 'available').length || 0,
-        emergencyTotal: data?.filter(b => b.bed_type === 'emergency').length || 0,
-        emergencyOccupied: data?.filter(b => b.bed_type === 'emergency' && b.bed_status === 'occupied').length || 0,
-        emergencyAvailable: data?.filter(b => b.bed_type === 'emergency' && b.bed_status === 'available').length || 0
+        total: scopedData.length || 0,
+        occupied: scopedData.filter((b: any) => b.bed_status === 'occupied').length || 0,
+        available: scopedData.filter((b: any) => b.bed_status === 'available').length || 0,
+        maintenance: scopedData.filter((b: any) => b.bed_status === 'maintenance').length || 0,
+        icuTotal: scopedData.filter((b: any) => b.bed_type === 'icu').length || 0,
+        icuOccupied: scopedData.filter((b: any) => b.bed_type === 'icu' && b.bed_status === 'occupied').length || 0,
+        icuAvailable: scopedData.filter((b: any) => b.bed_type === 'icu' && b.bed_status === 'available').length || 0,
+        emergencyTotal: scopedData.filter((b: any) => b.bed_type === 'emergency').length || 0,
+        emergencyOccupied: scopedData.filter((b: any) => b.bed_type === 'emergency' && b.bed_status === 'occupied').length || 0,
+        emergencyAvailable: scopedData.filter((b: any) => b.bed_type === 'emergency' && b.bed_status === 'available').length || 0
       };
       
       return { data: stats, error: null };
@@ -1454,6 +1565,9 @@ export const medicineService = {
 export const diagnosticReportService = {
   async getAll(): Promise<{ data: DiagnosticReport[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('diagnostic_reports')
         .select(`
@@ -1462,6 +1576,7 @@ export const diagnosticReportService = {
           hospitals (*),
           test_types (*)
         `)
+        .eq('hospital_id', hospitalId)
         .order('test_date', { ascending: false });
       
       if (error) throw error;
@@ -1481,6 +1596,9 @@ export const diagnosticReportService = {
 
   async getByCitizen(citizenId: string): Promise<{ data: DiagnosticReport[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('diagnostic_reports')
         .select(`
@@ -1490,6 +1608,7 @@ export const diagnosticReportService = {
           test_types (*)
         `)
         .eq('citizen_id', citizenId)
+        .eq('hospital_id', hospitalId)
         .order('test_date', { ascending: false });
       
       if (error) throw error;
@@ -1509,10 +1628,14 @@ export const diagnosticReportService = {
 
   async create(report: Partial<DiagnosticReport>): Promise<{ data: DiagnosticReport | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('diagnostic_reports')
         .insert({
           ...report,
+          hospital_id: hospitalId,
           uploaded_at: new Date().toISOString()
         })
         .select()
@@ -1527,10 +1650,14 @@ export const diagnosticReportService = {
 
   async update(reportId: string, updates: Partial<DiagnosticReport>): Promise<{ data: DiagnosticReport | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('diagnostic_reports')
         .update(updates)
         .eq('report_id', reportId)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -1543,10 +1670,14 @@ export const diagnosticReportService = {
 
   async delete(reportId: string): Promise<{ success: boolean; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports', true);
+      if (scopeError || !hospitalId) return { success: false, error: scopeError || 'Access Denied' };
+
       const { error } = await supabase
         .from('diagnostic_reports')
         .delete()
-        .eq('report_id', reportId);
+        .eq('report_id', reportId)
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       return { success: true, error: null };
@@ -1571,10 +1702,14 @@ export const diagnosticReportService = {
 
   async countPending(): Promise<{ count: number; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports');
+      if (scopeError || !hospitalId) return { count: 0, error: scopeError || 'Access Denied' };
+
       const { count, error } = await supabase
         .from('diagnostic_reports')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       return { count: count || 0, error: null };
@@ -1585,6 +1720,9 @@ export const diagnosticReportService = {
 
   async getByStatus(status: string): Promise<{ data: DiagnosticReport[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('diagnostic_reports')
         .select(`
@@ -1594,6 +1732,7 @@ export const diagnosticReportService = {
           test_types (*)
         `)
         .eq('status', status)
+        .eq('hospital_id', hospitalId)
         .order('test_date', { ascending: false });
       
       if (error) throw error;
@@ -1623,9 +1762,13 @@ export const diagnosticReportService = {
     error: string | null 
   }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('diagnostic_reports')
-        .select('status');
+        .select('status')
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       
@@ -1646,6 +1789,9 @@ export const diagnosticReportService = {
 
   async getById(reportId: string): Promise<{ data: DiagnosticReport | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('lab-reports');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('diagnostic_reports')
         .select(`
@@ -1655,6 +1801,7 @@ export const diagnosticReportService = {
           test_types (*)
         `)
         .eq('report_id', reportId)
+        .eq('hospital_id', hospitalId)
         .single();
       
       if (error) throw error;
@@ -1702,6 +1849,9 @@ export type LabReportStatus = LabReportStatusType;
 export const complaintService = {
   async getAll(): Promise<{ data: Complaint[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('complaints');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('complaints')
         .select(`
@@ -1709,6 +1859,7 @@ export const complaintService = {
           citizens (*),
           hospitals (*)
         `)
+        .eq('hospital_id', hospitalId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -1727,6 +1878,9 @@ export const complaintService = {
 
   async update(complaintId: string, updates: Partial<Complaint>): Promise<{ data: Complaint | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('complaints', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       if (updates.status === 'resolved') {
         updates.resolved_at = new Date().toISOString();
       }
@@ -1735,6 +1889,7 @@ export const complaintService = {
         .from('complaints')
         .update(updates)
         .eq('complaint_id', complaintId)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -1747,9 +1902,13 @@ export const complaintService = {
 
   async countPending(): Promise<{ count: number; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('complaints');
+      if (scopeError || !hospitalId) return { count: 0, error: scopeError || 'Access Denied' };
+
       const { count, error } = await supabase
         .from('complaints')
         .select('*', { count: 'exact', head: true })
+        .eq('hospital_id', hospitalId)
         .in('status', ['submitted', 'under_review', 'in_progress']);
       
       if (error) throw error;
@@ -1767,9 +1926,13 @@ export const complaintService = {
 export const staffService = {
   async getAll(): Promise<{ data: HospitalStaff[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('staff-management');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospital_staff')
         .select('*')
+        .eq('hospital_id', hospitalId)
         .order('name');
       
       if (error) throw error;
@@ -1781,9 +1944,13 @@ export const staffService = {
 
   async getByRole(role: string): Promise<{ data: HospitalStaff[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('staff-management');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospital_staff')
         .select('*')
+        .eq('hospital_id', hospitalId)
         .eq('role', role)
         .order('name');
       
@@ -1796,9 +1963,15 @@ export const staffService = {
 
   async create(staff: Partial<HospitalStaff>): Promise<{ data: HospitalStaff | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('staff-management', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospital_staff')
-        .insert(staff)
+        .insert({
+          ...staff,
+          hospital_id: hospitalId,
+        })
         .select()
         .single();
       
@@ -1811,10 +1984,14 @@ export const staffService = {
 
   async update(staffUuid: string, updates: Partial<HospitalStaff>): Promise<{ data: HospitalStaff | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('staff-management', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospital_staff')
         .update(updates)
         .eq('staff_uuid', staffUuid)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -1827,10 +2004,14 @@ export const staffService = {
 
   async delete(staffUuid: string): Promise<{ success: boolean; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('staff-management', true);
+      if (scopeError || !hospitalId) return { success: false, error: scopeError || 'Access Denied' };
+
       const { error } = await supabase
         .from('hospital_staff')
         .delete()
-        .eq('staff_uuid', staffUuid);
+        .eq('staff_uuid', staffUuid)
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       return { success: true, error: null };
@@ -1841,9 +2022,13 @@ export const staffService = {
 
   async count(): Promise<{ count: number; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('dashboard');
+      if (scopeError || !hospitalId) return { count: 0, error: scopeError || 'Access Denied' };
+
       const { count, error } = await supabase
         .from('hospital_staff')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       return { count: count || 0, error: null };
@@ -3177,10 +3362,14 @@ export interface VaccinationRecord {
 export const medicalEquipmentService = {
   async getAll(): Promise<{ data: MedicalEquipment[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       // First get all equipment
       const { data, error } = await supabase
         .from('medical_equipment')
         .select('*')
+        .eq('hospital_id', hospitalId)
         .order('equipment_category')
         .order('equipment_name');
       
@@ -3266,6 +3455,9 @@ export const medicalEquipmentService = {
 
   async create(equipment: Partial<MedicalEquipment>): Promise<{ data: MedicalEquipment | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       // Generate UUID for equipment_uuid
       const equipmentUuid = crypto.randomUUID();
       
@@ -3275,7 +3467,7 @@ export const medicalEquipmentService = {
         equipment_name: equipment.equipment_name,
         equipment_category: equipment.equipment_category || null,
         condition_status: equipment.condition_status || 'operational',
-        hospital_id: equipment.hospital_id || null,
+        hospital_id: hospitalId,
         equipment_location: equipment.equipment_location || null,
         manufacturer: equipment.manufacturer || null,
         model_number: equipment.model_number || null,
@@ -3304,11 +3496,14 @@ export const medicalEquipmentService = {
 
   async update(equipmentUuid: string, equipment: Partial<MedicalEquipment>): Promise<{ data: MedicalEquipment | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const updateData: Record<string, unknown> = {
         equipment_id: equipment.equipment_id || null,
         equipment_category: equipment.equipment_category || null,
         condition_status: equipment.condition_status || null,
-        hospital_id: equipment.hospital_id || null,
+        hospital_id: hospitalId,
         equipment_location: equipment.equipment_location || null,
         manufacturer: equipment.manufacturer || null,
         model_number: equipment.model_number || null,
@@ -3326,6 +3521,7 @@ export const medicalEquipmentService = {
         .from('medical_equipment')
         .update(updateData)
         .eq('equipment_uuid', equipmentUuid)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -3358,11 +3554,15 @@ export const medicalEquipmentService = {
 
   async delete(equipmentUuid: string): Promise<{ error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure', true);
+      if (scopeError || !hospitalId) return { error: scopeError || 'Access Denied' };
+
       console.log('Deleting equipment:', equipmentUuid);
       const { error } = await supabase
         .from('medical_equipment')
         .delete()
-        .eq('equipment_uuid', equipmentUuid);
+        .eq('equipment_uuid', equipmentUuid)
+        .eq('hospital_id', hospitalId);
       
       if (error) {
         console.error('Error deleting equipment:', error);
@@ -3377,9 +3577,13 @@ export const medicalEquipmentService = {
 
   async getStats(): Promise<{ data: { total: number; operational: number; maintenance: number; outOfService: number } | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('medical_equipment')
-        .select('condition_status');
+        .select('condition_status')
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       
@@ -3401,9 +3605,13 @@ export const medicalEquipmentService = {
 export const ambulanceService = {
   async getAll(): Promise<{ data: Ambulance[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('ambulances')
         .select('*')
+        .eq('hospital_id', hospitalId)
         .order('ambulance_vehicle_number');
       
       if (error) {
@@ -3455,10 +3663,16 @@ export const ambulanceService = {
 
   async create(ambulance: Partial<Ambulance>): Promise<{ data: Ambulance | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       console.log('Creating ambulance with data:', ambulance);
       const { data, error } = await supabase
         .from('ambulances')
-        .insert(ambulance)
+        .insert({
+          ...ambulance,
+          hospital_id: hospitalId,
+        })
         .select()
         .single();
       
@@ -3475,10 +3689,13 @@ export const ambulanceService = {
 
   async update(vehicleNumber: string, ambulance: Partial<Ambulance>): Promise<{ data: Ambulance | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       console.log('Updating ambulance:', vehicleNumber, ambulance);
       
       const updateData: Record<string, unknown> = {
-        hospital_id: ambulance.hospital_id || null,
+        hospital_id: hospitalId,
         status: ambulance.status || null,
         current_location: ambulance.current_location || null,
         updated_at: new Date().toISOString(),
@@ -3488,6 +3705,7 @@ export const ambulanceService = {
         .from('ambulances')
         .update(updateData)
         .eq('ambulance_vehicle_number', vehicleNumber)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -3518,11 +3736,15 @@ export const ambulanceService = {
 
   async delete(vehicleNumber: string): Promise<{ error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure', true);
+      if (scopeError || !hospitalId) return { error: scopeError || 'Access Denied' };
+
       console.log('Deleting ambulance:', vehicleNumber);
       const { error } = await supabase
         .from('ambulances')
         .delete()
-        .eq('ambulance_vehicle_number', vehicleNumber);
+        .eq('ambulance_vehicle_number', vehicleNumber)
+        .eq('hospital_id', hospitalId);
       
       if (error) {
         console.error('Error deleting ambulance:', error);
@@ -3537,9 +3759,13 @@ export const ambulanceService = {
 
   async getStats(): Promise<{ data: { total: number; available: number; outOfService: number; maintenance: number } | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('infrastructure');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('ambulances')
-        .select('status');
+        .select('status')
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       
@@ -3561,10 +3787,14 @@ export const ambulanceService = {
 export const medicineStockService = {
   async getAll(): Promise<{ data: MedicineStock[] | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('medicine-stock');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       // First get all medicine stock
       const { data, error } = await supabase
         .from('hospital_medicine_stock')
         .select('*')
+        .eq('hospital_id', hospitalId)
         .order('last_updated', { ascending: false });
       
       if (error) {
@@ -3639,6 +3869,11 @@ export const medicineStockService = {
 
   async getByHospital(hospitalId: string): Promise<{ data: MedicineStock[] | null; error: string | null }> {
     try {
+      const scope = getScopedHospitalId('medicine-stock');
+      if (scope.error || !scope.hospitalId || !ensureHospitalOwnership(scope.hospitalId, hospitalId)) {
+        return { data: null, error: scope.error || 'Access Denied' };
+      }
+
       const { data, error } = await supabase
         .from('hospital_medicine_stock')
         .select('*')
@@ -3698,10 +3933,14 @@ export const medicineStockService = {
 
   async getById(stockId: string): Promise<{ data: MedicineStock | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('medicine-stock');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospital_medicine_stock')
         .select('*')
         .eq('stock_id', stockId)
+        .eq('hospital_id', hospitalId)
         .single();
       
       if (error) throw error;
@@ -3765,8 +4004,11 @@ export const medicineStockService = {
 
   async create(stock: Partial<MedicineStock>): Promise<{ data: MedicineStock | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('medicine-stock', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const insertData = {
-        hospital_id: stock.hospital_id || null,
+        hospital_id: hospitalId,
         medicine_id: stock.medicine_id || null,
         quantity: stock.quantity || 0,
         threshold: stock.threshold || 10,
@@ -3796,8 +4038,11 @@ export const medicineStockService = {
 
   async update(stockId: string, stock: Partial<MedicineStock>): Promise<{ data: MedicineStock | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('medicine-stock', true);
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const updateData: Record<string, unknown> = {
-        hospital_id: stock.hospital_id || null,
+        hospital_id: hospitalId,
         medicine_id: stock.medicine_id || null,
         quantity: stock.quantity ?? null,
         threshold: stock.threshold ?? null,
@@ -3812,6 +4057,7 @@ export const medicineStockService = {
         .from('hospital_medicine_stock')
         .update(updateData)
         .eq('stock_id', stockId)
+        .eq('hospital_id', hospitalId)
         .select()
         .single();
       
@@ -3842,11 +4088,15 @@ export const medicineStockService = {
 
   async delete(stockId: string): Promise<{ error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('medicine-stock', true);
+      if (scopeError || !hospitalId) return { error: scopeError || 'Access Denied' };
+
       console.log('Deleting medicine stock:', stockId);
       const { error } = await supabase
         .from('hospital_medicine_stock')
         .delete()
-        .eq('stock_id', stockId);
+        .eq('stock_id', stockId)
+        .eq('hospital_id', hospitalId);
       
       if (error) {
         console.error('Error deleting medicine stock:', error);
@@ -3861,9 +4111,13 @@ export const medicineStockService = {
 
   async getStats(): Promise<{ data: { total: number; inStock: number; lowStock: number; outOfStock: number; expiringSoon: number } | null; error: string | null }> {
     try {
+      const { hospitalId, error: scopeError } = getScopedHospitalId('medicine-stock');
+      if (scopeError || !hospitalId) return { data: null, error: scopeError || 'Access Denied' };
+
       const { data, error } = await supabase
         .from('hospital_medicine_stock')
-        .select('quantity, threshold, expiry_date');
+        .select('quantity, threshold, expiry_date')
+        .eq('hospital_id', hospitalId);
       
       if (error) throw error;
       
@@ -3946,6 +4200,15 @@ export const referralService = {
     notes?: string;
   }): Promise<{ data: any | null; error: string | null }> {
     try {
+      const scope = getScopedHospitalId('referrals', true);
+      if (scope.error || !scope.hospitalId) {
+        return { data: null, error: scope.error || 'Access Denied' };
+      }
+
+      if (!ensureHospitalOwnership(scope.hospitalId, data.from_hospital_id)) {
+        return { data: null, error: 'Access Denied' };
+      }
+
       const { data: result, error } = await supabase
         .from('referrals')
         .insert({
@@ -3975,6 +4238,11 @@ export const referralService = {
 
   async getOutgoing(hospitalId?: string): Promise<{ data: any[] | null; error: string | null }> {
     try {
+      const scope = getScopedHospitalId('referrals');
+      if (scope.error || !scope.hospitalId) {
+        return { data: null, error: scope.error || 'Access Denied' };
+      }
+
       let query = supabase
         .from('referrals')
         .select(`
@@ -3994,9 +4262,7 @@ export const referralService = {
         .order('created_at', { ascending: false });
       
       // Filter by hospital if provided (for future use)
-      if (hospitalId) {
-        query = query.eq('from_hospital_id', hospitalId);
-      }
+      query = query.eq('from_hospital_id', hospitalId || scope.hospitalId);
       
       const { data: referrals, error } = await query;
       
@@ -4013,6 +4279,11 @@ export const referralService = {
 
   async getIncoming(hospitalId?: string): Promise<{ data: any[] | null; error: string | null }> {
     try {
+      const scope = getScopedHospitalId('referrals');
+      if (scope.error || !scope.hospitalId) {
+        return { data: null, error: scope.error || 'Access Denied' };
+      }
+
       let query = supabase
         .from('referrals')
         .select(`
@@ -4032,9 +4303,7 @@ export const referralService = {
         .order('created_at', { ascending: false });
       
       // Filter by hospital if provided (for future use)
-      if (hospitalId) {
-        query = query.eq('to_hospital_id', hospitalId);
-      }
+      query = query.eq('to_hospital_id', hospitalId || scope.hospitalId);
       
       const { data: referrals, error } = await query;
       
@@ -4087,6 +4356,11 @@ export const referralService = {
 
   async getById(referralId: string): Promise<{ data: any | null; error: string | null }> {
     try {
+      const scope = getScopedHospitalId('referrals');
+      if (scope.error || !scope.hospitalId) {
+        return { data: null, error: scope.error || 'Access Denied' };
+      }
+
       const { data: referral, error } = await supabase
         .from('referrals')
         .select(`
@@ -4107,6 +4381,12 @@ export const referralService = {
         .single();
       
       if (error) throw error;
+      if (
+        !ensureHospitalOwnership(scope.hospitalId, referral.from_hospital_id) &&
+        !ensureHospitalOwnership(scope.hospitalId, referral.to_hospital_id)
+      ) {
+        return { data: null, error: 'Access Denied' };
+      }
       
       // Enrich the single referral
       const enriched = await this.enrichReferrals([referral]);
@@ -4119,6 +4399,11 @@ export const referralService = {
 
   async updateStatus(referralId: string, status: string): Promise<{ data: any | null; error: string | null }> {
     try {
+      const scope = getScopedHospitalId('referrals', true);
+      if (scope.error || !scope.hospitalId) {
+        return { data: null, error: scope.error || 'Access Denied' };
+      }
+
       const { data, error } = await supabase
         .from('referrals')
         .update({
@@ -4126,6 +4411,7 @@ export const referralService = {
           updated_at: new Date().toISOString()
         })
         .eq('referral_id', referralId)
+        .eq('to_hospital_id', scope.hospitalId)
         .select()
         .single();
       
@@ -4142,10 +4428,16 @@ export const referralService = {
 
   async getStats(hospitalId?: string): Promise<{ data: { outgoing: number; incoming: number; pending: number; accepted: number } | null; error: string | null }> {
     try {
+      const scope = getScopedHospitalId('referrals');
+      if (scope.error || !scope.hospitalId) {
+        return { data: null, error: scope.error || 'Access Denied' };
+      }
+
       // Get all referrals
       const { data: allReferrals, error } = await supabase
         .from('referrals')
-        .select('from_hospital_id, to_hospital_id, status');
+        .select('from_hospital_id, to_hospital_id, status')
+        .or(`from_hospital_id.eq.${hospitalId || scope.hospitalId},to_hospital_id.eq.${hospitalId || scope.hospitalId}`);
       
       if (error) throw error;
       

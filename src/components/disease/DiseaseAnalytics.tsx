@@ -83,7 +83,6 @@ interface DiseaseCase {
   citizens: {
     citizen_id: string;
     name: string;
-    phone: string;
   } | null;
   hospitals: {
     hospital_id: string;
@@ -182,7 +181,7 @@ export default function DiseaseAnalytics() {
           status,
           reported_by,
           diseases (disease_id, disease_name, disease_category),
-          citizens (citizen_id, name, phone),
+          citizens (name),
           hospitals (hospital_id, name, ward_id, wards (ward_id, ward_name)),
           hospital_staff!reported_by (name, designation, department)
         `)
@@ -1047,14 +1046,6 @@ export default function DiseaseAnalytics() {
                       <div className="flex justify-between gap-2">
                         <span className="text-slate-500 flex-shrink-0">Name:</span>
                         <span className="font-medium text-right truncate">{selectedCase.citizens?.name || 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <span className="text-slate-500 flex-shrink-0">Phone:</span>
-                        <span className="font-medium">{selectedCase.citizens?.phone || 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <span className="text-slate-500 flex-shrink-0">Citizen ID:</span>
-                        <span className="font-medium text-xs truncate max-w-[200px]">{selectedCase.citizens?.citizen_id || 'N/A'}</span>
                       </div>
                     </CardContent>
                   </Card>

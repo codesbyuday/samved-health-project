@@ -1,21 +1,29 @@
-export const AUTH_SESSION_KEY = "smc-health-session";
+export const USER_SESSION_KEY = "user_session";
 export const AUTH_COOKIE_NAME = "smc_health_session";
 
-export interface StaffProfile {
+export interface UserProfile {
   user_id: string;
-  auth_role: string;
   name: string | null;
+  email: string | null;
+  role: string | null;
+  hospital_id: string | null;
+  hospital_name: string | null;
+  staff_uuid: string | null;
+  staff_id: string | null;
   designation: string | null;
   department: string | null;
-  hospital_id: string | null;
-  role: string | null;
   phone: string | null;
-  email: string | null;
+  address: string | null;
+  joined_at: string | null;
 }
 
 export interface SessionPayload {
   user_id: string;
   role: string;
+}
+
+export interface AuthenticatedUser extends UserProfile {
+  access_role: string;
 }
 
 export function encodeSession(payload: SessionPayload) {
