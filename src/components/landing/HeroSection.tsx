@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-gradient-to-br from-slate-900 via-blue-950 to-blue-700 px-6 py-12 text-white shadow-2xl sm:px-10 lg:px-14 lg:py-16">
+    <section className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-gradient-to-br from-slate-900 via-blue-950 to-blue-700 px-5 py-10 text-white shadow-2xl sm:px-8 sm:py-12 lg:px-14 lg:py-16">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.28),transparent_30%)]" />
       <div className="relative grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
         <div className="space-y-5">
@@ -10,7 +10,7 @@ export function HeroSection() {
             Public Health Dashboard
           </Badge>
           <div className="space-y-4">
-            <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+            <h1 className="max-w-3xl text-3xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
               City Health Monitoring System
             </h1>
             <p className="max-w-2xl text-base leading-7 text-blue-100 sm:text-lg">

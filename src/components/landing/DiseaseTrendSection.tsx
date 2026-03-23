@@ -25,10 +25,12 @@ export function DiseaseTrendSection({ topDiseases, timeline }: DiseaseTrendSecti
       <Card className="border-slate-200 shadow-sm dark:border-slate-800">
         <CardHeader>
           <CardTitle>Top Reported Diseases</CardTitle>
-          <CardDescription>Highest case counts from the latest 30-day reporting window</CardDescription>
+          <CardDescription className="dark:text-slate-400">
+            Highest case counts from the latest 30-day reporting window
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[320px]">
+          <div className="h-[300px] sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topDiseases}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -45,10 +47,12 @@ export function DiseaseTrendSection({ topDiseases, timeline }: DiseaseTrendSecti
       <Card className="border-slate-200 shadow-sm dark:border-slate-800">
         <CardHeader>
           <CardTitle>Cases Over Time</CardTitle>
-          <CardDescription>Daily reporting trend across the latest 30 days</CardDescription>
+          <CardDescription className="dark:text-slate-400">
+            Daily reporting trend across the latest 30 days
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[320px]">
+          <div className="h-[300px] sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={timeline}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />

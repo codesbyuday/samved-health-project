@@ -431,8 +431,8 @@ export default function MedicineStockComponent() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Medicine Stock</h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Medicine Stock</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Monitor and manage hospital medicine inventory
           </p>
         </div>
@@ -450,11 +450,11 @@ export default function MedicineStockComponent() {
 
       {/* Alert Banner */}
       {stockSummary.lowStock + stockSummary.outOfStock > 0 && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4 flex items-start gap-3">
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
           <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-red-800">Stock Alert</p>
-            <p className="text-sm text-red-700 mt-1">
+            <p className="font-medium text-red-800 dark:text-red-200">Stock Alert</p>
+            <p className="mt-1 text-sm text-red-700 dark:text-red-300">
               {stockSummary.outOfStock > 0 && `${stockSummary.outOfStock} medicine(s) out of stock. `}
               {stockSummary.lowStock > 0 && `${stockSummary.lowStock} medicine(s) running low. `}
               Please reorder immediately.
@@ -468,17 +468,17 @@ export default function MedicineStockComponent() {
         <Card
           className={cn(
             'border-l-4 border-l-green-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'in-stock' && 'ring-2 ring-green-300 bg-green-50/50'
+            statusFilter === 'in-stock' && 'ring-2 ring-green-300 bg-green-50/50 dark:bg-green-950/20'
           )}
           onClick={() => handleCardClick('in-stock')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500">In Stock</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">In Stock</p>
                 <p className="text-2xl font-bold text-green-600 mt-1">{stockSummary.inStock}</p>
               </div>
-              <div className="p-2 rounded-lg bg-green-50">
+              <div className="rounded-lg bg-green-50 p-2 dark:bg-green-950/30">
                 <Package className="h-5 w-5 text-green-600" />
               </div>
             </div>
@@ -488,17 +488,17 @@ export default function MedicineStockComponent() {
         <Card
           className={cn(
             'border-l-4 border-l-amber-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'low-stock' && 'ring-2 ring-amber-300 bg-amber-50/50'
+            statusFilter === 'low-stock' && 'ring-2 ring-amber-300 bg-amber-50/50 dark:bg-amber-950/20'
           )}
           onClick={() => handleCardClick('low-stock')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500">Low Stock</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Low Stock</p>
                 <p className="text-2xl font-bold text-amber-600 mt-1">{stockSummary.lowStock}</p>
               </div>
-              <div className="p-2 rounded-lg bg-amber-50">
+              <div className="rounded-lg bg-amber-50 p-2 dark:bg-amber-950/30">
                 <TrendingDown className="h-5 w-5 text-amber-600" />
               </div>
             </div>
@@ -508,17 +508,17 @@ export default function MedicineStockComponent() {
         <Card
           className={cn(
             'border-l-4 border-l-red-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'out-of-stock' && 'ring-2 ring-red-300 bg-red-50/50'
+            statusFilter === 'out-of-stock' && 'ring-2 ring-red-300 bg-red-50/50 dark:bg-red-950/20'
           )}
           onClick={() => handleCardClick('out-of-stock')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500">Out of Stock</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Out of Stock</p>
                 <p className="text-2xl font-bold text-red-600 mt-1">{stockSummary.outOfStock}</p>
               </div>
-              <div className="p-2 rounded-lg bg-red-50">
+              <div className="rounded-lg bg-red-50 p-2 dark:bg-red-950/30">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
               </div>
             </div>
@@ -528,17 +528,17 @@ export default function MedicineStockComponent() {
         <Card
           className={cn(
             'border-l-4 border-l-orange-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'expiring-soon' && 'ring-2 ring-orange-300 bg-orange-50/50'
+            statusFilter === 'expiring-soon' && 'ring-2 ring-orange-300 bg-orange-50/50 dark:bg-orange-950/20'
           )}
           onClick={() => handleCardClick('expiring-soon')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500">Expiring Soon</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Expiring Soon</p>
                 <p className="text-2xl font-bold text-orange-600 mt-1">{stockSummary.expiringSoon}</p>
               </div>
-              <div className="p-2 rounded-lg bg-orange-50">
+              <div className="rounded-lg bg-orange-50 p-2 dark:bg-orange-950/30">
                 <Calendar className="h-5 w-5 text-orange-600" />
               </div>
             </div>
@@ -548,7 +548,7 @@ export default function MedicineStockComponent() {
 
       {/* Filter indicator */}
       {statusFilter !== 'all' && (
-        <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-100 p-2 rounded-lg">
+        <div className="flex items-center gap-2 rounded-lg bg-slate-100 p-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
           <span>Filtered:</span>
           <Badge variant="secondary" className="capitalize">
             {stockStatusConfig[statusFilter as StockStatus]?.label || statusFilter}
@@ -646,7 +646,7 @@ export default function MedicineStockComponent() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50">
+                <TableRow className="bg-slate-50 dark:bg-slate-800/80">
                   <TableHead className="font-semibold">Medicine Name</TableHead>
                   <TableHead className="font-semibold">Category</TableHead>
                   <TableHead className="font-semibold">Quantity</TableHead>
@@ -665,10 +665,10 @@ export default function MedicineStockComponent() {
                   const stockPercentage = Math.min(100, (quantity / (threshold * 2)) * 100);
 
                   return (
-                    <TableRow key={stock.stock_id} className="hover:bg-slate-50">
+                    <TableRow key={stock.stock_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
                       <TableCell>
                         <div>
-                          <p className="font-medium text-slate-800">
+                          <p className="font-medium text-slate-800 dark:text-slate-100">
                             {stock.medicine?.medicine_name || 'Unknown Medicine'}
                           </p>
                           <p className="text-xs text-slate-500">

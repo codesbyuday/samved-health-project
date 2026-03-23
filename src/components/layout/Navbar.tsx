@@ -35,6 +35,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 interface NavbarProps {
   onMenuToggle: () => void;
   isMobileSidebarOpen: boolean;
+  isSidebarCollapsed: boolean;
+  isMobile: boolean;
 }
 
 // Static notification data to avoid hydration issues
@@ -44,7 +46,12 @@ const staticNotifications = [
   { id: '3', title: 'Equipment Maintenance', message: 'MRI Machine scheduled for maintenance', type: 'info', timeAgo: '2 hours ago', read: true },
 ];
 
-export default function Navbar({ onMenuToggle, isMobileSidebarOpen }: NavbarProps) {
+export default function Navbar({
+  onMenuToggle,
+  isMobileSidebarOpen,
+  isSidebarCollapsed,
+  isMobile,
+}: NavbarProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showMobileSearch, setShowMobileSearch] = useState(false);
@@ -81,7 +88,13 @@ export default function Navbar({ onMenuToggle, isMobileSidebarOpen }: NavbarProp
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-30 h-16 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:bg-slate-900/95 dark:border-slate-700">
+    <header
+      className={cn(
+        "fixed top-0 left-0 right-0 z-30 h-16 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:bg-slate-900/95 dark:border-slate-700",
+        !isMobile && !isSidebarCollapsed && "lg:left-64",
+        !isMobile && isSidebarCollapsed && "lg:left-16"
+      )}
+    >
       <div className="flex h-full items-center justify-between px-4">
         {/* Left Section */}
         <div className="flex items-center gap-3">

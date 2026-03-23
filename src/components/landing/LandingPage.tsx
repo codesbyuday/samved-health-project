@@ -58,13 +58,15 @@ export function LandingPage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(30,136,229,0.12),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.10),transparent_28%)] bg-slate-50 dark:bg-slate-950">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(30,136,229,0.12),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.10),transparent_28%)] bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <PublicHeader />
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <HeroSection />
-        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-          <span>Public health analytics are updated from the live disease reporting database.</span>
-          <span className="font-medium">
+        <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <span className="pr-0 sm:pr-4">
+            Public health analytics are updated from the live disease reporting database.
+          </span>
+          <span className="font-medium text-slate-700 dark:text-slate-200">
             {isLoading ? (
               <span className="inline-flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />

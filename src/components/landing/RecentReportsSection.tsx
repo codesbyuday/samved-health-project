@@ -19,7 +19,7 @@ export function RecentReportsSection({ reports }: RecentReportsSectionProps) {
       <Card className="border-slate-200 shadow-sm dark:border-slate-800">
         <CardHeader>
           <CardTitle>Recent Disease Reports</CardTitle>
-          <CardDescription>
+          <CardDescription className="dark:text-slate-400">
             Latest non-sensitive reports with disease, ward, hospital, and reporting date only
           </CardDescription>
         </CardHeader>
@@ -44,9 +44,9 @@ export function RecentReportsSection({ reports }: RecentReportsSectionProps) {
                 ) : (
                   reports.map((report, index) => (
                     <TableRow key={`${report.diseaseName}-${report.date}-${index}`}>
-                      <TableCell className="font-medium">{report.diseaseName}</TableCell>
-                      <TableCell>{report.ward}</TableCell>
-                      <TableCell>{report.hospitalName}</TableCell>
+                      <TableCell className="font-medium text-slate-900 dark:text-slate-100">{report.diseaseName}</TableCell>
+                      <TableCell className="text-slate-700 dark:text-slate-300">{report.ward}</TableCell>
+                      <TableCell className="text-slate-700 dark:text-slate-300">{report.hospitalName}</TableCell>
                       <TableCell className="text-right">{report.date}</TableCell>
                     </TableRow>
                   ))

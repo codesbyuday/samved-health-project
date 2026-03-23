@@ -23,10 +23,12 @@ export function WardAnalysisSection({ wards }: WardAnalysisSectionProps) {
       <Card className="border-slate-200 shadow-sm dark:border-slate-800">
         <CardHeader>
           <CardTitle>Ward-Wise Analysis</CardTitle>
-          <CardDescription>Top affected wards based on recent public disease reporting</CardDescription>
+          <CardDescription className="dark:text-slate-400">
+            Top affected wards based on recent public disease reporting
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[320px]">
+          <div className="h-[300px] sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={wards} layout="vertical" margin={{ left: 12 }}>
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" />
@@ -50,7 +52,9 @@ export function WardAnalysisSection({ wards }: WardAnalysisSectionProps) {
       <Card className="border-slate-200 shadow-sm dark:border-slate-800">
         <CardHeader>
           <CardTitle>Top Affected Wards</CardTitle>
-          <CardDescription>Quick operational overview for recent public trends</CardDescription>
+          <CardDescription className="dark:text-slate-400">
+            Quick operational overview for recent public trends
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {wards.length === 0 ? (

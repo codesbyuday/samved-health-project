@@ -731,8 +731,8 @@ export default function InfrastructureStatus() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Infrastructure Management</h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Infrastructure Management</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Monitor and manage hospital equipment and ambulances
           </p>
         </div>
@@ -764,17 +764,17 @@ export default function InfrastructureStatus() {
             <Card 
               className={cn(
                 'border-l-4 border-l-blue-500 cursor-pointer transition-all hover:shadow-md',
-                equipmentFilter === 'all' && 'ring-2 ring-blue-300 bg-blue-50/50'
+                equipmentFilter === 'all' && 'ring-2 ring-blue-300 bg-blue-50/50 dark:bg-blue-950/20'
               )}
               onClick={() => setEquipmentFilter('all')}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500">Total Equipment</p>
-                    <p className="text-3xl font-bold text-slate-800 mt-1">{equipmentStats.total}</p>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Equipment</p>
+                    <p className="mt-1 text-3xl font-bold text-slate-800 dark:text-white">{equipmentStats.total}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-blue-50">
+                  <div className="rounded-xl bg-blue-50 p-3 dark:bg-blue-950/30">
                     <Activity className="h-6 w-6 text-blue-600" />
                   </div>
                 </div>
@@ -784,17 +784,17 @@ export default function InfrastructureStatus() {
             <Card 
               className={cn(
                 'border-l-4 border-l-green-500 cursor-pointer transition-all hover:shadow-md',
-                equipmentFilter === 'operational' && 'ring-2 ring-green-300 bg-green-50/50'
+                equipmentFilter === 'operational' && 'ring-2 ring-green-300 bg-green-50/50 dark:bg-green-950/20'
               )}
               onClick={() => setEquipmentFilter('operational')}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500">Operational</p>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Operational</p>
                     <p className="text-3xl font-bold text-green-600 mt-1">{equipmentStats.operational}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-green-50">
+                  <div className="rounded-xl bg-green-50 p-3 dark:bg-green-950/30">
                     <CheckCircle className="h-6 w-6 text-green-600" />
                   </div>
                 </div>
@@ -804,17 +804,17 @@ export default function InfrastructureStatus() {
             <Card 
               className={cn(
                 'border-l-4 border-l-amber-500 cursor-pointer transition-all hover:shadow-md',
-                equipmentFilter === 'maintenance' && 'ring-2 ring-amber-300 bg-amber-50/50'
+                equipmentFilter === 'maintenance' && 'ring-2 ring-amber-300 bg-amber-50/50 dark:bg-amber-950/20'
               )}
               onClick={() => setEquipmentFilter('maintenance')}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500">Under Maintenance</p>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Under Maintenance</p>
                     <p className="text-3xl font-bold text-amber-600 mt-1">{equipmentStats.maintenance}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-amber-50">
+                  <div className="rounded-xl bg-amber-50 p-3 dark:bg-amber-950/30">
                     <Wrench className="h-6 w-6 text-amber-600" />
                   </div>
                 </div>
@@ -824,17 +824,17 @@ export default function InfrastructureStatus() {
             <Card 
               className={cn(
                 'border-l-4 border-l-red-500 cursor-pointer transition-all hover:shadow-md',
-                equipmentFilter === 'outOfService' && 'ring-2 ring-red-300 bg-red-50/50'
+                equipmentFilter === 'outOfService' && 'ring-2 ring-red-300 bg-red-50/50 dark:bg-red-950/20'
               )}
               onClick={() => setEquipmentFilter('outOfService')}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500">Out of Service</p>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Out of Service</p>
                     <p className="text-3xl font-bold text-red-600 mt-1">{equipmentStats.outOfService}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-red-50">
+                  <div className="rounded-xl bg-red-50 p-3 dark:bg-red-950/30">
                     <XCircle className="h-6 w-6 text-red-600" />
                   </div>
                 </div>
@@ -872,7 +872,7 @@ export default function InfrastructureStatus() {
 
           {/* Filter indicator */}
           {(equipmentFilter !== 'all' || equipmentCategoryFilter !== 'all' || equipmentSearch) && (
-            <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-100 p-2 rounded-lg flex-wrap">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-100 p-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               <span>Filtered:</span>
               {equipmentFilter !== 'all' && (
                 <Badge variant="secondary" className="capitalize">
@@ -954,34 +954,34 @@ export default function InfrastructureStatus() {
                       {/* Category Header */}
                       <div className={cn(
                         'px-4 py-2 flex items-center justify-between border-b',
-                        CATEGORY_COLORS[category] || 'bg-slate-50 border-slate-200'
+                        CATEGORY_COLORS[category] || 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700'
                       )}>
                         <div className="flex items-center gap-2">
                           <FolderOpen className="h-4 w-4" />
-                          <span className={cn('font-semibold', CATEGORY_TEXT_COLORS[category] || 'text-slate-800')}>
+                          <span className={cn('font-semibold', CATEGORY_TEXT_COLORS[category] || 'text-slate-800 dark:text-slate-100')}>
                             {category}
                           </span>
                         </div>
-                        <Badge variant="secondary" className="bg-white/70">
+                        <Badge variant="secondary" className="bg-white/70 dark:bg-slate-700 dark:text-slate-100">
                           {items.length}
                         </Badge>
                       </div>
                       
                       {/* Equipment Items */}
-                      <div className="divide-y bg-white">
+                      <div className="divide-y bg-white dark:bg-slate-950">
                         {items.map((eq) => (
                           <div 
                             key={eq.equipment_uuid} 
-                            className="flex items-center justify-between p-3 hover:bg-slate-50 transition-colors"
+                            className="flex items-center justify-between p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
                           >
                             <div className="flex-1 min-w-0 mr-4">
                               <div className="flex items-center gap-2">
-                                <p className="font-medium text-slate-800 truncate">{eq.equipment_name}</p>
+                                <p className="truncate font-medium text-slate-800 dark:text-slate-100">{eq.equipment_name}</p>
                                 {eq.equipment_id && (
                                   <span className="text-xs font-mono text-slate-400 shrink-0">[{eq.equipment_id}]</span>
                                 )}
                               </div>
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-slate-500">
+                              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 {eq.hospital && (
                                   <span className="flex items-center gap-1">
                                     <Building2 className="h-3 w-3" />
@@ -1018,7 +1018,7 @@ export default function InfrastructureStatus() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 w-7 p-0 hover:bg-slate-100"
+                                className="h-7 w-7 p-0 hover:bg-slate-100 dark:hover:bg-slate-800"
                                 onClick={() => openViewEquipmentDialog(eq)}
                                 title="View Details"
                               >

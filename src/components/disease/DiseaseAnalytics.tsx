@@ -427,8 +427,8 @@ export default function DiseaseAnalytics() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Disease Analytics</h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Disease Analytics</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Deep analysis and investigation tool for disease surveillance
           </p>
         </div>
@@ -442,11 +442,11 @@ export default function DiseaseAnalytics() {
 
       {/* Active Filters Alert */}
       {hasActiveFilters && (
-        <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 flex items-start gap-3">
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
           <Filter className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="font-medium text-blue-800">Filters Applied</p>
-            <p className="text-sm text-blue-700 mt-1">
+            <p className="font-medium text-blue-800 dark:text-blue-200">Filters Applied</p>
+            <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
               Showing {filteredCases.length} of {cases.length} records
             </p>
           </div>
@@ -865,7 +865,7 @@ export default function DiseaseAnalytics() {
               <div className="overflow-x-auto border rounded-lg">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50">
+                    <TableRow className="bg-slate-50 dark:bg-slate-800/80">
                       <TableHead className="font-semibold whitespace-nowrap min-w-[180px]">Citizen Name</TableHead>
                       <TableHead className="font-semibold whitespace-nowrap min-w-[150px]">Disease</TableHead>
                       <TableHead className="font-semibold whitespace-nowrap min-w-[120px]">Ward</TableHead>
@@ -879,7 +879,7 @@ export default function DiseaseAnalytics() {
                   </TableHeader>
                   <TableBody>
                     {paginatedCases.map((caseItem) => (
-                      <TableRow key={caseItem.case_id} className="hover:bg-slate-50">
+                      <TableRow key={caseItem.case_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2 whitespace-nowrap">
                             <User className="h-4 w-4 text-slate-400 flex-shrink-0" />
@@ -905,8 +905,8 @@ export default function DiseaseAnalytics() {
                         </TableCell>
                         <TableCell>
                           <div className="whitespace-nowrap">
-                            <p className="text-sm">{caseItem.hospital_staff?.name || 'N/A'}</p>
-                            <p className="text-xs text-slate-500">{caseItem.hospital_staff?.department || ''}</p>
+                            <p className="text-sm text-slate-900 dark:text-slate-100">{caseItem.hospital_staff?.name || 'N/A'}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{caseItem.hospital_staff?.department || ''}</p>
                           </div>
                         </TableCell>
                         <TableCell>

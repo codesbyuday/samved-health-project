@@ -115,7 +115,12 @@ export default function DashboardShell() {
 
   return (
     <div className="min-h-screen bg-slate-50 transition-colors duration-300 dark:bg-slate-950">
-      <Navbar onMenuToggle={toggleSidebar} isMobileSidebarOpen={isMobileSidebarOpen} />
+      <Navbar
+        onMenuToggle={toggleSidebar}
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        isSidebarCollapsed={isSidebarCollapsed}
+        isMobile={isMobile}
+      />
 
       <Sidebar
         currentPage={currentPage}
