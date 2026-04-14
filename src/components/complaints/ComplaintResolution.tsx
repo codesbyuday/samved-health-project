@@ -71,7 +71,7 @@ const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
     icon: <Search className="h-3 w-3" />,
   },
   in_progress: {
-    color: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700',
+    color: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800',
     icon: <ArrowUpRight className="h-3 w-3" />,
   },
   resolved: {
@@ -86,7 +86,7 @@ const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
 
 const priorityConfig: Record<string, string> = {
   low: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
-  medium: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  medium: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
   high: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
   critical: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
 };
@@ -228,10 +228,10 @@ export default function ComplaintResolution() {
             <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{complaintSummary.pending}</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-blue-500 dark:bg-slate-800 dark:border-slate-700">
+        <Card className="border-l-4 border-l-emerald-600 dark:bg-slate-800 dark:border-slate-700">
           <CardContent className="p-4">
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">In Progress</p>
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{complaintSummary.inProgress}</p>
+            <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-1">{complaintSummary.inProgress}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-green-500 dark:bg-slate-800 dark:border-slate-700">
@@ -368,7 +368,7 @@ export default function ComplaintResolution() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                            className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
                             onClick={() => handleRespond(complaint)}
                             title="Respond to complaint"
                           >

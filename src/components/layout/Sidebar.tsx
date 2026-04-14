@@ -155,7 +155,7 @@ export default function Sidebar({
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white',
+          'fixed top-0 left-0 z-50 h-screen border-r border-amber-200/10 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_18rem),linear-gradient(180deg,#07120f,#10231d_48%,#1c1917)] text-white shadow-2xl shadow-stone-950/30',
           'transition-all duration-300 ease-in-out',
           // Mobile: slide in/out from left
           'transform lg:transform-none',
@@ -169,7 +169,7 @@ export default function Sidebar({
         {/* Mobile Close Button - Inside Sidebar */}
         <button
           onClick={onClose}
-          className="lg:hidden absolute top-4 right-4 z-50 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+          className="lg:hidden absolute top-4 right-4 z-50 flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
           aria-label="Close sidebar"
         >
           <X className="h-5 w-5" />
@@ -179,7 +179,7 @@ export default function Sidebar({
         <button
           onClick={onClose}
           className={cn(
-            'hidden lg:flex absolute -right-3 top-20 z-50 h-6 w-6 items-center justify-center rounded-full bg-[#1E88E5] text-white shadow-lg hover:bg-[#1565C0] transition-all duration-300',
+            'hidden lg:flex absolute -right-3 top-20 z-50 h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-amber-400 text-white shadow-lg shadow-emerald-900/30 hover:scale-105 transition-all duration-300',
             !isCollapsed && 'rotate-180'
           )}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -188,10 +188,10 @@ export default function Sidebar({
         </button>
 
         {/* Hospital Branding */}
-        <div className="p-4 border-b border-slate-700 pt-16 lg:pt-4">
+        <div className="p-4 border-b border-white/10 pt-16 lg:pt-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1E88E5]/20 flex-shrink-0">
-              <Activity className="h-6 w-6 text-[#1E88E5]" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 via-teal-600 to-amber-400 shadow-lg shadow-emerald-900/25 flex-shrink-0">
+              <Activity className="h-6 w-6 text-white" />
             </div>
             <div
               className={cn(
@@ -199,8 +199,8 @@ export default function Sidebar({
                 isCollapsed && 'lg:w-0 lg:opacity-0'
               )}
             >
-              <p className="text-sm font-semibold whitespace-nowrap">SMC Hospital</p>
-              <p className="text-xs text-slate-400 whitespace-nowrap">Solapur Municipal</p>
+              <p className="text-sm font-semibold whitespace-nowrap">Hospital Portal</p>
+              <p className="text-xs text-slate-300 whitespace-nowrap">by Tech-Lifter</p>
             </div>
           </div>
         </div>
@@ -213,10 +213,10 @@ export default function Sidebar({
                 <button
                   onClick={() => handleNavigate(item.id)}
                   className={cn(
-                    'group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                    'group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition-all duration-200',
                     currentPage === item.id
-                      ? 'bg-[#1E88E5] text-white shadow-lg shadow-[#1E88E5]/25'
-                      : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+                      ? 'bg-gradient-to-r from-emerald-700 via-teal-600 to-amber-500 text-white shadow-lg shadow-emerald-900/25'
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
                   )}
                   title={isCollapsed ? item.label : undefined}
                 >
@@ -232,7 +232,7 @@ export default function Sidebar({
                   {item.badge && (
                     <span
                       className={cn(
-                        'flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold transition-all duration-200',
+                        'flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-xs font-bold transition-all duration-200',
                         isCollapsed && 'lg:hidden'
                       )}
                     >
@@ -247,7 +247,7 @@ export default function Sidebar({
 
         {/* Emergency Section */}
         <div className="absolute bottom-4 left-4 right-4">
-          <div className="rounded-lg bg-gradient-to-r from-red-600/20 to-orange-600/20 p-3 border border-red-500/30">
+          <div className="rounded-2xl bg-gradient-to-r from-rose-500/20 to-orange-400/20 p-3 border border-rose-400/30 shadow-lg shadow-rose-950/20">
             <div
               className={cn(
                 'flex items-center gap-2 text-sm font-medium text-red-400',

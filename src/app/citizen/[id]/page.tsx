@@ -126,9 +126,9 @@ export default function CitizenProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-orange-50">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <Loader2 className="h-12 w-12 animate-spin text-emerald-700 mx-auto mb-4" />
           <p className="text-slate-600">Loading health profile...</p>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function CitizenProfilePage() {
 
   if (error || !citizen) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-orange-50">
         <Card className="max-w-md w-full mx-4">
           <CardContent className="pt-6 text-center">
             <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
@@ -150,12 +150,12 @@ export default function CitizenProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-orange-50 p-2 sm:p-4">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-orange-50 p-2 sm:p-4">
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between px-2">
           <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+            <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-700" />
             <h1 className="text-lg sm:text-xl font-bold text-slate-800">Citizen Health Profile</h1>
           </div>
           <Badge variant="outline" className="font-mono text-xs sm:text-sm">{citizen.citizen_id}</Badge>
@@ -173,7 +173,7 @@ export default function CitizenProfilePage() {
                   ) : (
                     <AvatarFallback className={cn(
                       'text-2xl sm:text-3xl',
-                      citizen.gender === 'Male' && 'bg-blue-100 text-blue-800',
+                      citizen.gender === 'Male' && 'bg-emerald-100 text-emerald-900',
                       citizen.gender === 'Female' && 'bg-pink-100 text-pink-800',
                       citizen.gender === 'Transgender' && 'bg-purple-100 text-purple-800'
                     )}>
@@ -513,7 +513,7 @@ export default function CitizenProfilePage() {
           <DialogContent className="max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-lg">
-                <ClipboardList className="h-5 w-5 text-blue-600" />
+                <ClipboardList className="h-5 w-5 text-emerald-700" />
                 Health Record Details
               </DialogTitle>
               <DialogDescription>
@@ -525,7 +525,7 @@ export default function CitizenProfilePage() {
                 {/* Hospital Info */}
                 <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
                   <div className="flex items-start gap-3">
-                    <Building2 className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <Building2 className="h-5 w-5 text-emerald-700 mt-0.5" />
                     <div>
                       <p className="font-semibold text-base">{selectedHealthRecord.hospital?.name || 'N/A'}</p>
                       <p className="text-sm text-slate-500">{selectedHealthRecord.hospital?.address || 'Address not available'}</p>
@@ -582,10 +582,10 @@ export default function CitizenProfilePage() {
                 {/* Notes */}
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <MessageSquare className="h-4 w-4 text-blue-500" />
+                    <MessageSquare className="h-4 w-4 text-emerald-600" />
                     <p className="font-medium text-sm text-slate-700 dark:text-slate-300">Notes</p>
                   </div>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                  <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-lg p-3">
                     <p className="text-sm whitespace-pre-wrap">{selectedHealthRecord.notes || 'No additional notes'}</p>
                   </div>
                 </div>
@@ -693,7 +693,7 @@ export default function CitizenProfilePage() {
 
         {/* Footer */}
         <div className="text-center text-xs sm:text-sm text-slate-500 py-4">
-          <p>Solapur Municipal Corporation - Citizen Health Portal</p>
+          <p>Hospital Management Portal - Citizen Health Portal</p>
           <p className="text-xs mt-1">This is a read-only view. For any corrections, please contact your registered hospital.</p>
         </div>
       </div>

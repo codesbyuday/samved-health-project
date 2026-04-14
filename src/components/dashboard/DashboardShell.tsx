@@ -114,7 +114,7 @@ export default function DashboardShell() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 transition-colors duration-300 dark:bg-slate-950">
+    <div className="min-h-screen bg-background transition-colors duration-300">
       <Navbar
         onMenuToggle={toggleSidebar}
         isMobileSidebarOpen={isMobileSidebarOpen}
@@ -138,7 +138,7 @@ export default function DashboardShell() {
           !isMobile && isSidebarCollapsed && "lg:ml-16"
         )}
       >
-        <div className="min-h-screen bg-slate-50 p-4 transition-colors duration-300 md:p-6 dark:bg-slate-950">
+        <div className="min-h-screen bg-transparent p-4 transition-colors duration-300 md:p-6">
           {renderPageContent()}
         </div>
       </main>

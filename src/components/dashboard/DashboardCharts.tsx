@@ -20,7 +20,7 @@ import {
 import { dashboardService } from '@/services/database';
 import { Loader2 } from 'lucide-react';
 
-const COLORS = ['#1E88E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+const COLORS = ['#047857', '#D97706', '#0F766E', '#BE123C', '#7C3AED', '#EA580C'];
 
 // Custom tooltip component with proper styling
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -43,18 +43,22 @@ export function PatientVisitsChart() {
   const [data, setData] = useState<{ date: string; patients: number; emergencies: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  async function loadData() {
     setLoading(true);
     const { data: result } = await dashboardService.getPatientVisitsData();
     if (result) {
       setData(result);
     }
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   if (loading) {
     return (
@@ -64,7 +68,7 @@ export function PatientVisitsChart() {
         </CardHeader>
         <CardContent>
           <div className="h-[250px] flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
           </div>
         </CardContent>
       </Card>
@@ -83,8 +87,8 @@ export function PatientVisitsChart() {
             <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
               <defs>
                 <linearGradient id="colorPatients" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1E88E5" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#1E88E5" stopOpacity={0.1} />
+                  <stop offset="5%" stopColor="#047857" stopOpacity={0.8} />
+                  <stop offset="95%" stopColor="#047857" stopOpacity={0.1} />
                 </linearGradient>
                 <linearGradient id="colorEmergencies" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8} />
@@ -103,7 +107,7 @@ export function PatientVisitsChart() {
                 type="monotone"
                 dataKey="patients"
                 name="OPD Patients"
-                stroke="#1E88E5"
+                stroke="#047857"
                 strokeWidth={2}
                 fillOpacity={1}
                 fill="url(#colorPatients)"
@@ -131,7 +135,7 @@ const BarTooltip = ({ active, payload, label }: any) => {
     return (
       <div className="bg-slate-800 border border-slate-600 rounded-lg shadow-lg px-3 py-2">
         <p className="text-white font-medium text-sm">{label}</p>
-        <p className="text-sm text-blue-400">
+        <p className="text-sm text-emerald-300">
           Cases: <span className="text-white font-semibold">{payload[0].value}</span>
         </p>
       </div>
@@ -144,18 +148,22 @@ export function DiseaseTrendsChart() {
   const [data, setData] = useState<{ name: string; cases: number; trend: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  async function loadData() {
     setLoading(true);
     const { data: result } = await dashboardService.getDiseaseTrends();
     if (result) {
       setData(result);
     }
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   if (loading) {
     return (
@@ -165,7 +173,7 @@ export function DiseaseTrendsChart() {
         </CardHeader>
         <CardContent>
           <div className="h-[250px] flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
           </div>
         </CardContent>
       </Card>
@@ -244,18 +252,22 @@ export function BedOccupancyChart() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  async function loadData() {
     setLoading(true);
     const { data: result } = await dashboardService.getBedOccupancyData();
     if (result) {
       setData(result);
     }
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   if (loading) {
     return (
@@ -265,7 +277,7 @@ export function BedOccupancyChart() {
         </CardHeader>
         <CardContent>
           <div className="h-[280px] flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
           </div>
         </CardContent>
       </Card>

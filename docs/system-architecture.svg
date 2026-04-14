@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1050" viewBox="0 0 1400 1050">
+  <defs>
+    <style>
+      .title { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 600 15px Arial, sans-serif; fill: #0f172a; }
+      .small { font: 500 13px Arial, sans-serif; fill: #334155; }
+      .box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 16; }
+      .blue { fill: #eff6ff; stroke: #2563eb; }
+      .green { fill: #ecfdf5; stroke: #059669; }
+      .amber { fill: #fffbeb; stroke: #d97706; }
+      .red { fill: #fef2f2; stroke: #dc2626; }
+      .purple { fill: #faf5ff; stroke: #9333ea; }
+      .dark { fill: #0f172a; stroke: #1e40af; }
+      .darkText { fill: #ffffff; font: 700 15px Arial, sans-serif; }
+      .darkSmall { fill: #dbeafe; font: 500 13px Arial, sans-serif; }
+      .line { stroke: #64748b; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #64748b; stroke-width: 2; fill: none; stroke-dasharray: 7 6; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b" />
+    </marker>
+  </defs>
+
+  <rect width="1400" height="1050" fill="#f8fafc"/>
+  <text x="700" y="48" text-anchor="middle" class="title">Hospital Management Portal - System Architecture</text>
+
+  <rect x="70" y="95" width="250" height="75" class="box blue"/>
+  <text x="195" y="124" text-anchor="middle" class="label">Hospital Staff User</text>
+  <text x="195" y="148" text-anchor="middle" class="small">Doctor, Nurse, Admin, Operator</text>
+
+  <rect x="405" y="95" width="260" height="75" class="box dark"/>
+  <text x="535" y="124" text-anchor="middle" class="darkText">Next.js 16 Frontend</text>
+  <text x="535" y="148" text-anchor="middle" class="darkSmall">Hospital Management Portal</text>
+
+  <rect x="750" y="95" width="245" height="75" class="box blue"/>
+  <text x="872" y="124" text-anchor="middle" class="label">Login Page</text>
+  <text x="872" y="148" text-anchor="middle" class="small">Email/Phone + Password</text>
+
+  <rect x="1080" y="95" width="250" height="75" class="box green"/>
+  <text x="1205" y="124" text-anchor="middle" class="label">Next.js API Routes</text>
+  <text x="1205" y="148" text-anchor="middle" class="small">/api/login, /api/profile</text>
+
+  <path d="M320 132 L405 132" class="line"/>
+  <path d="M665 132 L750 132" class="line"/>
+  <path d="M995 132 L1080 132" class="line"/>
+
+  <rect x="980" y="225" width="170" height="70" class="box amber"/>
+  <text x="1065" y="253" text-anchor="middle" class="label">auth_users</text>
+  <text x="1065" y="276" text-anchor="middle" class="small">Custom Auth</text>
+
+  <rect x="1185" y="225" width="170" height="70" class="box amber"/>
+  <text x="1270" y="253" text-anchor="middle" class="label">hospital_staff</text>
+  <text x="1270" y="276" text-anchor="middle" class="small">Staff Profile</text>
+
+  <rect x="1082" y="340" width="170" height="70" class="box amber"/>
+  <text x="1167" y="368" text-anchor="middle" class="label">hospitals</text>
+  <text x="1167" y="391" text-anchor="middle" class="small">Hospital Details</text>
+
+  <path d="M1205 170 L1065 225" class="line"/>
+  <path d="M1150 260 L1185 260" class="line"/>
+  <path d="M1270 295 L1167 340" class="line"/>
+
+  <rect x="70" y="250" width="250" height="75" class="box green"/>
+  <text x="195" y="279" text-anchor="middle" class="label">Auth Context + Session</text>
+  <text x="195" y="303" text-anchor="middle" class="small">localStorage + Cookies</text>
+
+  <rect x="405" y="250" width="260" height="75" class="box blue"/>
+  <text x="535" y="279" text-anchor="middle" class="label">Protected Dashboard Shell</text>
+  <text x="535" y="303" text-anchor="middle" class="small">Navbar, Sidebar, Modules</text>
+
+  <rect x="750" y="250" width="245" height="75" class="box purple"/>
+  <text x="872" y="279" text-anchor="middle" class="label">RBAC Permission Layer</text>
+  <text x="872" y="303" text-anchor="middle" class="small">Role-Based Access Control</text>
+
+  <rect x="750" y="360" width="245" height="75" class="box red"/>
+  <text x="872" y="389" text-anchor="middle" class="label">Hospital Data Isolation</text>
+  <text x="872" y="413" text-anchor="middle" class="small">Filter by hospital_id</text>
+
+  <path d="M1082 375 C760 365, 420 345, 320 290" class="line"/>
+  <path d="M320 288 L405 288" class="line"/>
+  <path d="M665 288 L750 288" class="line"/>
+  <path d="M872 325 L872 360" class="line"/>
+
+  <text x="700" y="500" text-anchor="middle" class="label">Hospital Modules</text>
+
+  <rect x="60" y="535" width="180" height="62" class="box blue"/>
+  <text x="150" y="562" text-anchor="middle" class="label">Patient Records</text>
+  <text x="150" y="584" text-anchor="middle" class="small">health_records</text>
+
+  <rect x="270" y="535" width="180" height="62" class="box blue"/>
+  <text x="360" y="562" text-anchor="middle" class="label">Appointments</text>
+  <text x="360" y="584" text-anchor="middle" class="small">appointments</text>
+
+  <rect x="480" y="535" width="180" height="62" class="box blue"/>
+  <text x="570" y="562" text-anchor="middle" class="label">Lab Reports</text>
+  <text x="570" y="584" text-anchor="middle" class="small">diagnostic_reports</text>
+
+  <rect x="690" y="535" width="180" height="62" class="box blue"/>
+  <text x="780" y="562" text-anchor="middle" class="label">Bed Management</text>
+  <text x="780" y="584" text-anchor="middle" class="small">beds / wards</text>
+
+  <rect x="900" y="535" width="180" height="62" class="box blue"/>
+  <text x="990" y="562" text-anchor="middle" class="label">Medicine Stock</text>
+  <text x="990" y="584" text-anchor="middle" class="small">medicine_stock</text>
+
+  <rect x="1110" y="535" width="220" height="62" class="box blue"/>
+  <text x="1220" y="562" text-anchor="middle" class="label">Infrastructure</text>
+  <text x="1220" y="584" text-anchor="middle" class="small">equipment / ambulances</text>
+
+  <rect x="225" y="650" width="180" height="62" class="box blue"/>
+  <text x="315" y="677" text-anchor="middle" class="label">Referrals</text>
+  <text x="315" y="699" text-anchor="middle" class="small">referrals</text>
+
+  <rect x="440" y="650" width="180" height="62" class="box blue"/>
+  <text x="530" y="677" text-anchor="middle" class="label">Complaints</text>
+  <text x="530" y="699" text-anchor="middle" class="small">complaints</text>
+
+  <rect x="655" y="650" width="210" height="62" class="box blue"/>
+  <text x="760" y="677" text-anchor="middle" class="label">Disease Analytics</text>
+  <text x="760" y="699" text-anchor="middle" class="small">disease_cases / diseases</text>
+
+  <path d="M872 435 C870 505, 150 485, 150 535" class="dash"/>
+  <path d="M872 435 C870 505, 360 485, 360 535" class="dash"/>
+  <path d="M872 435 C870 505, 570 485, 570 535" class="dash"/>
+  <path d="M872 435 C870 505, 780 485, 780 535" class="dash"/>
+  <path d="M872 435 C890 505, 990 485, 990 535" class="dash"/>
+  <path d="M872 435 C950 505, 1220 485, 1220 535" class="dash"/>
+  <path d="M872 435 C760 610, 315 600, 315 650" class="dash"/>
+  <path d="M872 435 C820 610, 530 600, 530 650" class="dash"/>
+  <path d="M872 435 C850 610, 760 600, 760 650" class="dash"/>
+
+  <rect x="480" y="785" width="230" height="70" class="box green"/>
+  <text x="595" y="813" text-anchor="middle" class="label">Supabase Storage</text>
+  <text x="595" y="836" text-anchor="middle" class="small">Private Lab Reports Bucket</text>
+
+  <rect x="760" y="785" width="230" height="70" class="box green"/>
+  <text x="875" y="813" text-anchor="middle" class="label">Signed URL API</text>
+  <text x="875" y="836" text-anchor="middle" class="small">Secure View / Download</text>
+
+  <path d="M570 597 L595 785" class="line"/>
+  <path d="M710 820 L760 820" class="line"/>
+
+  <rect x="70" y="785" width="180" height="70" class="box purple"/>
+  <text x="160" y="813" text-anchor="middle" class="label">Health Card QR</text>
+  <text x="160" y="836" text-anchor="middle" class="small">Scan Patient Card</text>
+
+  <rect x="70" y="905" width="220" height="70" class="box purple"/>
+  <text x="180" y="933" text-anchor="middle" class="label">Citizen Health Profile</text>
+  <text x="180" y="956" text-anchor="middle" class="small">Appointments, Reports, Records</text>
+
+  <path d="M160 855 L180 905" class="line"/>
+  <path d="M290 940 C430 940, 150 690, 150 597" class="line"/>
+
+  <rect x="1080" y="785" width="250" height="70" class="box amber"/>
+  <text x="1205" y="813" text-anchor="middle" class="label">Public Landing Page</text>
+  <text x="1205" y="836" text-anchor="middle" class="small">Aggregated Health Analytics</text>
+
+  <rect x="1080" y="905" width="250" height="70" class="box amber"/>
+  <text x="1205" y="933" text-anchor="middle" class="label">/api/public-analytics</text>
+  <text x="1205" y="956" text-anchor="middle" class="small">No Personal Citizen Data</text>
+
+  <path d="M1205 855 L1205 905" class="line"/>
+  <path d="M1080 940 C930 930, 760 760, 760 712" class="line"/>
+</svg>

@@ -1,0 +1,45 @@
+flowchart TD
+    A["Hospital Staff User<br/>(Doctor, Nurse, Admin, Operator)"] --> B["Next.js 16 Frontend<br/>Hospital Management Portal"]
+
+    B --> C["Login Page<br/>Email/Phone + Password"]
+    C --> D["Next.js API Route<br/>/api/login"]
+    D --> E["auth_users Table<br/>Custom Authentication"]
+    E --> F["hospital_staff Table<br/>Staff Profile"]
+    F --> G["hospitals Table<br/>Hospital Details"]
+
+    G --> H["Auth Context + Session<br/>localStorage + Cookies"]
+    H --> I["Protected Dashboard Shell"]
+
+    I --> J["RBAC Permission Layer<br/>Role-Based Access Control"]
+    J --> K["Hospital-Level Data Isolation<br/>Filter by hospital_id"]
+
+    K --> L["Patient Records Module"]
+    K --> M["Appointments Module"]
+    K --> N["Lab Reports Module"]
+    K --> O["Bed Management Module"]
+    K --> P["Medicine Stock Module"]
+    K --> Q["Infrastructure Module"]
+    K --> R["Referrals Module"]
+    K --> S["Complaints Module"]
+    K --> T["Disease Analytics Module"]
+
+    L --> U["health_records<br/>citizens<br/>disease_cases"]
+    M --> V["appointments"]
+    N --> W["diagnostic_reports / lab reports"]
+    O --> X["beds / wards"]
+    P --> Y["medicine_stock / medicines"]
+    Q --> Z["equipment / ambulances"]
+    R --> AA["referrals"]
+    S --> AB["complaints"]
+    T --> AC["disease_cases / diseases / wards"]
+
+    W --> AD["Supabase Storage<br/>Private Lab Reports Bucket"]
+    AD --> AE["Signed URL API<br/>Secure View / Download"]
+
+    AF["Health Card QR Code"] --> AG["Citizen Verification Page"]
+    AG --> AH["Citizen Health Profile"]
+    AH --> U
+
+    AI["Public Landing Page"] --> AJ["/api/public-analytics"]
+    AJ --> AC
+    AJ --> AK["Aggregated Public Analytics<br/>No Personal Citizen Data"]

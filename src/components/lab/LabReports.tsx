@@ -78,8 +78,8 @@ const statusConfig: Record<LabReportStatus, { color: string; bgColor: string; ic
     label: 'Pending'
   },
   in_progress: {
-    color: 'text-blue-700 dark:text-blue-400',
-    bgColor: 'bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700',
+    color: 'text-emerald-800 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800',
     icon: <RefreshCw className="h-3 w-3" />,
     label: 'In Progress'
   },
@@ -562,7 +562,7 @@ export default function LabReports() {
         </div>
         {canManageReports ? (
           <Button 
-            className="bg-[#1E88E5] hover:bg-[#1565C0]" 
+            className="bg-[#047857] hover:bg-[#065F46]" 
             onClick={() => {
               resetForm();
               setShowAddDialog(true);
@@ -582,7 +582,7 @@ export default function LabReports() {
         <Card 
           className={cn(
             'p-3 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'all' ? 'ring-2 ring-[#1E88E5] bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+            statusFilter === 'all' ? 'ring-2 ring-[#047857] bg-emerald-50 dark:bg-emerald-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
           )}
           onClick={() => setStatusFilter('all')}
         >
@@ -605,7 +605,7 @@ export default function LabReports() {
               key={status.value} 
               className={cn(
                 'p-3 cursor-pointer transition-all hover:shadow-md',
-                statusFilter === status.value ? 'ring-2 ring-[#1E88E5]' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                statusFilter === status.value ? 'ring-2 ring-[#047857]' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
               )}
               onClick={() => setStatusFilter(status.value)}
             >
@@ -646,7 +646,7 @@ export default function LabReports() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
             </div>
           ) : filteredReports.length === 0 ? (
             <div className="text-center py-12 text-slate-500 dark:text-slate-400">
@@ -673,7 +673,7 @@ export default function LabReports() {
                     <TableRow key={report.report_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[#1E88E5] to-blue-600 flex items-center justify-center">
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[#047857] to-emerald-700 flex items-center justify-center">
                             <User className="h-4 w-4 text-white" />
                           </div>
                           <div>
@@ -740,9 +740,9 @@ export default function LabReports() {
                                 variant="ghost"
                                 onClick={() => openViewDialog(report)}
                                 title="View Report Details"
-                                className="hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                className="hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
                               >
-                                <Eye className="h-4 w-4 text-blue-500" />
+                                <Eye className="h-4 w-4 text-emerald-600" />
                               </Button>
                             </>
                           ) : (
@@ -751,9 +751,9 @@ export default function LabReports() {
                               variant="ghost"
                               onClick={() => openViewDialog(report)}
                               title="View Report Details"
-                              className="hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                              className="hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
                             >
-                              <Eye className="h-4 w-4 text-blue-500" />
+                              <Eye className="h-4 w-4 text-emerald-600" />
                             </Button>
                           )}
                           {canManageReports ? (
@@ -850,7 +850,7 @@ export default function LabReports() {
                           onClick={() => handleSelectCitizen(citizen)}
                         >
                           <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#1E88E5] to-blue-600 flex items-center justify-center">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#047857] to-emerald-700 flex items-center justify-center">
                               <User className="h-4 w-4 text-white" />
                             </div>
                             <div>
@@ -1050,7 +1050,7 @@ export default function LabReports() {
             <Button 
               onClick={handleAddReport}
               disabled={isSubmitting}
-              className="bg-[#1E88E5] hover:bg-[#1565C0]"
+              className="bg-[#047857] hover:bg-[#065F46]"
             >
               {isSubmitting ? (
                 <>
@@ -1081,7 +1081,7 @@ export default function LabReports() {
             {/* Read-only info */}
             <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg space-y-2">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#1E88E5] to-blue-600 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#047857] to-emerald-700 flex items-center justify-center">
                   <User className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -1249,7 +1249,7 @@ export default function LabReports() {
             <Button 
               onClick={handleEditReport}
               disabled={isSubmitting}
-              className="bg-[#1E88E5] hover:bg-[#1565C0]"
+              className="bg-[#047857] hover:bg-[#065F46]"
             >
               {isSubmitting ? (
                 <>
@@ -1371,7 +1371,7 @@ export default function LabReports() {
                   <Eye className="h-4 w-4 mr-2" />
                   View Report
                 </Button>
-                <Button onClick={() => handleDownloadFile(viewingReport)} className="bg-[#1E88E5] hover:bg-[#1565C0]">
+                <Button onClick={() => handleDownloadFile(viewingReport)} className="bg-[#047857] hover:bg-[#065F46]">
                   <Download className="h-4 w-4 mr-2" />
                   Download Report
                 </Button>

@@ -368,7 +368,7 @@ export default function BedManagement() {
       case 'available': return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800';
       case 'occupied': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
       case 'maintenance': return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800';
-      case 'reserved': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800';
+      case 'reserved': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900';
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
@@ -376,7 +376,7 @@ export default function BedManagement() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
       </div>
     );
   }
@@ -409,11 +409,11 @@ export default function BedManagement() {
 
       {/* Summary Cards - Clickable */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="border-l-4 border-l-[#1E88E5] cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveFilter('all')}>
+        <Card className="border-l-4 border-l-[#047857] cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveFilter('all')}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <BedDouble className="h-5 w-5 text-[#1E88E5]" />
+              <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950/30">
+                <BedDouble className="h-5 w-5 text-[#047857]" />
               </div>
               <div>
                 <p className="text-xs text-slate-500">Total Beds</p>
@@ -506,7 +506,7 @@ export default function BedManagement() {
             variant={activeFilter === filter ? 'default' : 'outline'}
             size="sm"
             onClick={() => setActiveFilter(filter)}
-            className={cn('capitalize', activeFilter === filter && 'bg-[#1E88E5] hover:bg-[#1565C0]')}
+            className={cn('capitalize', activeFilter === filter && 'bg-[#047857] hover:bg-[#065F46]')}
           >
             {filter === 'all' ? 'All Beds' : filter}
           </Button>

@@ -78,9 +78,9 @@ export default function VerifyPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-orange-50 p-4">
         <div className="text-center">
-          <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 animate-spin text-emerald-700 mx-auto mb-4" />
           <p className="text-slate-600 text-sm sm:text-base">Loading...</p>
         </div>
       </div>
@@ -89,7 +89,7 @@ export default function VerifyPage() {
 
   if (!citizenExists) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-orange-50 p-4">
         <Card className="max-w-md w-full mx-4">
           <CardContent className="pt-6 text-center">
             <AlertCircle className="h-12 w-12 sm:h-16 sm:w-16 text-red-500 mx-auto mb-4" />
@@ -98,7 +98,7 @@ export default function VerifyPage() {
               The citizen ID &quot;{citizenId}&quot; does not exist in our records.
             </p>
             <p className="text-xs sm:text-sm text-slate-500">
-              Please check the ID and try again, or contact Solapur Municipal Corporation for assistance.
+              Please check the ID and try again, or contact your registered hospital for assistance.
             </p>
           </CardContent>
         </Card>
@@ -107,12 +107,12 @@ export default function VerifyPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50 p-3 sm:p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-orange-50 p-3 sm:p-4">
       <Card className="max-w-md w-full">
         <CardHeader className="text-center px-4 sm:px-6">
           <div className="flex justify-center mb-3 sm:mb-4">
-            <div className="bg-blue-100 p-3 sm:p-4 rounded-full">
-              <Shield className="h-8 w-8 sm:h-12 sm:w-12 text-blue-600" />
+            <div className="bg-emerald-100 p-3 sm:p-4 rounded-full">
+              <Shield className="h-8 w-8 sm:h-12 sm:w-12 text-emerald-700" />
             </div>
           </div>
           <CardTitle className="text-xl sm:text-2xl">Verify Your Identity</CardTitle>
@@ -141,9 +141,9 @@ export default function VerifyPage() {
                 />
                 <Label
                   htmlFor="phone"
-                  className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-transparent p-3 sm:p-4 hover:bg-slate-50 hover:border-blue-200 peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50 cursor-pointer"
+                  className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-transparent p-3 sm:p-4 hover:bg-slate-50 hover:border-emerald-200 peer-data-[state=checked]:border-emerald-700 peer-data-[state=checked]:bg-emerald-50 cursor-pointer"
                 >
-                  <Phone className="mb-1 sm:mb-2 h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+                  <Phone className="mb-1 sm:mb-2 h-5 w-5 sm:h-6 sm:w-6 text-emerald-700" />
                   <span className="font-medium text-sm sm:text-base">Mobile</span>
                   <span className="text-xs text-slate-500 mt-0.5 sm:mt-1">10-digit number</span>
                 </Label>
@@ -156,9 +156,9 @@ export default function VerifyPage() {
                 />
                 <Label
                   htmlFor="aadhar"
-                  className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-transparent p-3 sm:p-4 hover:bg-slate-50 hover:border-blue-200 peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50 cursor-pointer"
+                  className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-transparent p-3 sm:p-4 hover:bg-slate-50 hover:border-emerald-200 peer-data-[state=checked]:border-emerald-700 peer-data-[state=checked]:bg-emerald-50 cursor-pointer"
                 >
-                  <CreditCard className="mb-1 sm:mb-2 h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+                  <CreditCard className="mb-1 sm:mb-2 h-5 w-5 sm:h-6 sm:w-6 text-emerald-700" />
                   <span className="font-medium text-sm sm:text-base">Aadhar ID</span>
                   <span className="text-xs text-slate-500 mt-0.5 sm:mt-1">12-digit Aadhar</span>
                 </Label>
@@ -233,7 +233,7 @@ export default function VerifyPage() {
           {/* Citizen ID Display */}
           <div className="text-center pt-3 sm:pt-4 border-t">
             <p className="text-xs text-slate-500">Citizen ID</p>
-            <p className="font-mono font-bold text-blue-600 text-sm sm:text-base break-all">{citizenId}</p>
+            <p className="font-mono font-bold text-emerald-700 text-sm sm:text-base break-all">{citizenId}</p>
           </div>
         </CardContent>
       </Card>

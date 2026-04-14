@@ -28,12 +28,12 @@ const variantStyles = {
     valueColor: 'text-slate-800 dark:text-white',
   },
   primary: {
-    bg: 'bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40',
-    iconBg: 'bg-blue-200 dark:bg-blue-700/50',
-    iconColor: 'text-blue-600 dark:text-blue-400',
-    border: 'border-blue-200 dark:border-blue-700',
-    titleColor: 'text-blue-700 dark:text-blue-300',
-    valueColor: 'text-blue-800 dark:text-white',
+    bg: 'bg-gradient-to-br from-emerald-100 via-teal-50 to-amber-50 dark:from-emerald-950/50 dark:via-teal-950/30 dark:to-amber-950/20',
+    iconBg: 'bg-emerald-200 dark:bg-emerald-800/50',
+    iconColor: 'text-emerald-700 dark:text-emerald-300',
+    border: 'border-emerald-200 dark:border-emerald-800',
+    titleColor: 'text-emerald-800 dark:text-emerald-200',
+    valueColor: 'text-stone-950 dark:text-white',
   },
   success: {
     bg: 'bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40',
@@ -75,7 +75,7 @@ export default function SummaryCard({
   return (
     <Card
       className={cn(
-        'transition-all duration-200 hover:shadow-lg cursor-pointer group overflow-hidden',
+        'transition-all duration-200 hover:shadow-xl cursor-pointer group overflow-hidden rounded-[1.5rem]',
         styles.border,
         styles.bg,
         onClick && 'hover:scale-[1.02]'
@@ -109,7 +109,7 @@ export default function SummaryCard({
           </div>
           <div
             className={cn(
-              'flex h-12 w-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110',
+              'flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110',
               styles.iconBg
             )}
           >

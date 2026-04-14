@@ -126,7 +126,7 @@ const severityColors: Record<string, string> = {
 };
 
 const statusColors: Record<string, string> = {
-  under_treatment: 'bg-blue-100 text-blue-700',
+  under_treatment: 'bg-emerald-100 text-emerald-800',
   recovered: 'bg-green-100 text-green-700',
   referred: 'bg-purple-100 text-purple-700',
   deceased: 'bg-slate-100 text-slate-700',
@@ -400,7 +400,7 @@ export default function DiseaseAnalytics() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto text-emerald-700" />
           <p className="mt-2 text-slate-600">Loading disease data...</p>
         </div>
       </div>
@@ -442,11 +442,11 @@ export default function DiseaseAnalytics() {
 
       {/* Active Filters Alert */}
       {hasActiveFilters && (
-        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
-          <Filter className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-950 dark:bg-emerald-950/30">
+          <Filter className="h-5 w-5 text-emerald-700 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="font-medium text-blue-800 dark:text-blue-200">Filters Applied</p>
-            <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+            <p className="font-medium text-emerald-900 dark:text-emerald-200">Filters Applied</p>
+            <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
               Showing {filteredCases.length} of {cases.length} records
             </p>
           </div>
@@ -563,7 +563,7 @@ export default function DiseaseAnalytics() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <Activity className="h-5 w-5 text-blue-600" />
+            <Activity className="h-5 w-5 text-emerald-700" />
             Trend Analysis
             <Badge variant="outline" className="font-normal">Last 60 Days</Badge>
           </CardTitle>

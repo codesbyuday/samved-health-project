@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Building2, Moon, Sun } from "lucide-react";
+import { Activity, Hospital, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoginOptionsDialog } from "@/components/landing/LoginOptionsDialog";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -12,16 +12,16 @@ export function PublicHeader() {
     <header className="sticky top-0 z-20 border-b border-white/60 bg-white/80 backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/80">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1E88E5] to-blue-700 text-white shadow-lg">
-            <Building2 className="h-5 w-5" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 via-teal-600 to-amber-400 text-white shadow-lg shadow-emerald-900/20">
+            <Hospital className="h-5 w-5" />
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-900 dark:text-white sm:text-base">
-              Smart Public Health System
+              Hospital Management Portal
             </p>
             <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
               <Activity className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Public disease intelligence dashboard</span>
+              <span className="truncate">Tech-Lifter hospital operations suite</span>
             </p>
           </div>
         </div>
@@ -31,7 +31,7 @@ export function PublicHeader() {
             variant="outline"
             size="icon"
             onClick={toggleTheme}
-            className="h-10 w-10 shrink-0 border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="h-10 w-10 shrink-0 border-stone-200 bg-white/90 text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-900/70 dark:bg-stone-950/60 dark:text-stone-200 dark:hover:bg-emerald-950/40"
             aria-label={mounted && theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >
             {!mounted ? (

@@ -77,13 +77,13 @@ export default function Navbar({
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'alert':
-        return '🚨';
+        return '!';
       case 'warning':
-        return '⚠️';
+        return '!';
       case 'success':
-        return '✅';
+        return 'OK';
       default:
-        return 'ℹ️';
+        return 'i';
     }
   };
 
@@ -103,7 +103,7 @@ export default function Navbar({
             variant="ghost"
             size="icon"
             onClick={onMenuToggle}
-            className="h-9 w-9 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="h-9 w-9 hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/40"
             aria-label={isMobileSidebarOpen ? 'Close menu' : 'Open menu'}
           >
             {isMobileSidebarOpen ? (
@@ -115,15 +115,15 @@ export default function Navbar({
 
           {/* Logo & Title */}
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#1E88E5] to-blue-600 shadow-md">
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 via-teal-600 to-amber-400 shadow-lg shadow-emerald-900/20">
               <Hospital className="h-5 w-5 text-white" />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-slate-800 dark:text-white leading-tight">
-                SMC Hospital Portal
+                Hospital Management Portal
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
-                Solapur Municipal Corporation
+                Tech-Lifter Clinical Suite
               </span>
             </div>
           </div>
@@ -131,10 +131,10 @@ export default function Navbar({
           {/* Government Badge */}
           <Badge
             variant="outline"
-            className="hidden md:flex items-center gap-1 bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/30 dark:border-orange-800 dark:text-orange-400"
+            className="hidden md:flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-200"
           >
             <Shield className="h-3 w-3" />
-            <span className="text-xs font-medium">Govt. Hospital</span>
+            <span className="text-xs font-medium">Secure Portal</span>
           </Badge>
         </div>
 
@@ -147,7 +147,7 @@ export default function Navbar({
               placeholder="Search patients, appointments, reports..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 bg-slate-50 border-slate-200 focus:bg-white h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-400"
+              className="h-10 w-full rounded-2xl border-stone-200 bg-white/80 pl-10 pr-4 shadow-sm focus:bg-white dark:border-emerald-900/70 dark:bg-stone-950/40 dark:text-white dark:placeholder:text-stone-400"
             />
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function Navbar({
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
-            className="h-9 w-9 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="h-9 w-9 hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/40"
             aria-label={mounted && theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {!mounted ? (
@@ -209,14 +209,14 @@ export default function Navbar({
                     key={notification.id}
                     className={cn(
                       'flex flex-col items-start gap-1 p-3 cursor-pointer dark:focus:bg-slate-700',
-                      !notification.read && 'bg-blue-50/50 dark:bg-blue-900/20'
+                      !notification.read && 'bg-emerald-50/70 dark:bg-emerald-950/25'
                     )}
                   >
                     <div className="flex items-center gap-2 w-full">
-                      <span className="text-lg">{getNotificationIcon(notification.type)}</span>
+                      <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-50 px-1 text-[10px] font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-200">{getNotificationIcon(notification.type)}</span>
                       <span className="text-sm font-medium flex-1 dark:text-white">{notification.title}</span>
                       {!notification.read && (
-                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
                       )}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 pl-7">
@@ -229,7 +229,7 @@ export default function Navbar({
                 ))}
               </div>
               <DropdownMenuSeparator className="dark:bg-slate-700" />
-              <DropdownMenuItem className="text-center text-[#1E88E5] font-medium dark:text-blue-400">
+              <DropdownMenuItem className="text-center font-medium text-primary dark:text-emerald-300">
                 View all notifications
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -239,7 +239,7 @@ export default function Navbar({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2 h-9">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#1E88E5] to-blue-600 text-white font-medium text-sm">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-700 via-teal-600 to-amber-400 text-white font-medium text-sm shadow-sm shadow-emerald-900/25">
                   {avatarInitial}
                 </div>
                 <div className="hidden md:flex flex-col items-start">

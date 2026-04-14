@@ -747,7 +747,7 @@ export default function CitizenServices() {
                                 ) : (
                                   <span className={cn(
                                     'text-sm font-medium',
-                                    c.gender === 'Male' && 'text-blue-700',
+                                    c.gender === 'Male' && 'text-emerald-800',
                                     c.gender === 'Female' && 'text-pink-700',
                                     c.gender === 'Transgender' && 'text-purple-700'
                                   )}>

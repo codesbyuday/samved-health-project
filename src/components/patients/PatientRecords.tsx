@@ -830,11 +830,11 @@ export default function PatientRecords() {
     const colors: Record<string, string> = {
       active: 'bg-red-50 text-red-700 border-red-200',
       recovered: 'bg-green-50 text-green-700 border-green-200',
-      under_treatment: 'bg-blue-50 text-blue-700 border-blue-200',
+      under_treatment: 'bg-emerald-50 text-emerald-800 border-emerald-200',
       deceased: 'bg-slate-50 text-slate-700 border-slate-200',
       pending: 'bg-yellow-50 text-yellow-700 border-yellow-200',
       completed: 'bg-green-50 text-green-700 border-green-200',
-      in_progress: 'bg-blue-50 text-blue-700 border-blue-200'
+      in_progress: 'bg-emerald-50 text-emerald-800 border-emerald-200'
     };
     return colors[status.toLowerCase()] || 'bg-slate-50 text-slate-700 border-slate-200';
   };
@@ -942,7 +942,7 @@ export default function PatientRecords() {
           <Card className="lg:col-span-1">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary to-blue-600 text-white text-2xl font-bold">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary to-emerald-700 text-white text-2xl font-bold">
                   {selectedCitizen.name?.charAt(0) || '?'}
                 </div>
                 <div>
@@ -1000,9 +1000,9 @@ export default function PatientRecords() {
 
               {/* Visit Statistics */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
-                  <p className="text-xs text-blue-600 font-medium">Total Visits</p>
-                  <p className="text-2xl font-bold text-blue-700">{totalVisits}</p>
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+                  <p className="text-xs text-emerald-700 font-medium">Total Visits</p>
+                  <p className="text-2xl font-bold text-emerald-800">{totalVisits}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-green-50 border border-green-100">
                   <p className="text-xs text-green-600 font-medium">Last Visit</p>
@@ -2002,7 +2002,7 @@ export default function PatientRecords() {
                     {diseaseResults.slice(0, 10).map((disease) => (
                       <button
                         key={disease.disease_id}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 text-left transition-colors"
+                        className="w-full flex items-center gap-3 p-3 hover:bg-emerald-50 text-left transition-colors"
                         onClick={() => {
                           setSelectedDisease(disease);
                           setDiseaseSearch('');

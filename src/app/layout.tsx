@@ -5,18 +5,18 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 
 export const metadata: Metadata = {
-  title: "SMC Hospital Portal - Solapur Municipal Corporation",
-  description: "Smart Public Health Management System for Solapur Municipal Corporation. Manage patients, appointments, infrastructure, disease reporting, and hospital analytics.",
-  keywords: ["Hospital Management", "Healthcare", "Solapur", "Government Hospital", "Public Health", "SMC", "Medical Portal"],
-  authors: [{ name: "Solapur Municipal Corporation" }],
+  title: "Hospital Management Portal | Tech-Lifter",
+  description: "Premium hospital operations portal for patient records, appointments, infrastructure, referrals, medicines, disease analytics, and role-based clinical workflows.",
+  keywords: ["Hospital Management", "Healthcare", "Tech-Lifter", "Patient Records", "Medical Portal", "Hospital Operations"],
+  authors: [{ name: "Tech-Lifter" }],
   icons: {
-    icon: "/favicon_smc.png",
+    icon: "/health-logo.png",
   },
   openGraph: {
-    title: "SMC Hospital Portal",
-    description: "Smart Public Health Management System",
-    url: "https://smc.solapur.gov.in",
-    siteName: "SMC Hospital Portal",
+    title: "Hospital Management Portal",
+    description: "Hospital operations and patient records portal by Tech-Lifter",
+    url: "https://tech-lifter.health",
+    siteName: "Hospital Management Portal",
     type: "website",
   },
 };

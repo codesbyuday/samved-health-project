@@ -39,7 +39,7 @@ const getNotificationIcon = (type: string) => {
     case 'success':
       return <CheckCircle className="h-4 w-4 text-green-500" />;
     default:
-      return <Info className="h-4 w-4 text-blue-500" />;
+      return <Info className="h-4 w-4 text-emerald-600" />;
   }
 };
 
@@ -52,7 +52,7 @@ const getNotificationBg = (type: string) => {
     case 'success':
       return 'bg-green-50 dark:bg-green-950/30 border-green-100 dark:border-green-900';
     default:
-      return 'bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900';
+      return 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900';
   }
 };
 
@@ -60,18 +60,22 @@ export default function NotificationsPanel({ className }: NotificationsPanelProp
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadAlerts();
-  }, []);
-
-  const loadAlerts = async () => {
+  async function loadAlerts() {
     setLoading(true);
     const { data } = await dashboardService.getDynamicAlerts();
     if (data) {
       setNotifications(data);
     }
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadAlerts();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const unreadNotifications = notifications.filter((n) => !n.read);
 
@@ -87,7 +91,7 @@ export default function NotificationsPanel({ className }: NotificationsPanelProp
     <Card className={cn('h-full bg-white dark:bg-slate-900 dark:border-slate-700 transition-colors', className)}>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-white">SMC Notifications</CardTitle>
+          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-white">Hospital Notifications</CardTitle>
           {unreadNotifications.length > 0 && (
             <Badge variant="secondary" className="bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300">
               {unreadNotifications.length} new
@@ -97,7 +101,7 @@ export default function NotificationsPanel({ className }: NotificationsPanelProp
         <Button 
           variant="ghost" 
           size="sm" 
-          className="text-xs text-[#1E88E5] dark:text-blue-400"
+          className="text-xs text-emerald-700 dark:text-emerald-300"
           onClick={markAllRead}
           disabled={unreadNotifications.length === 0}
         >
@@ -107,7 +111,7 @@ export default function NotificationsPanel({ className }: NotificationsPanelProp
       <CardContent className="px-3 pb-3">
         {loading ? (
           <div className="h-[340px] flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
           </div>
         ) : (
           <ScrollArea className="h-[340px] pr-2">
@@ -119,7 +123,7 @@ export default function NotificationsPanel({ className }: NotificationsPanelProp
                     className={cn(
                       'relative p-3 rounded-lg border transition-all hover:shadow-md cursor-pointer',
                       getNotificationBg(notification.type),
-                      !notification.read && 'ring-1 ring-[#1E88E5]/20'
+                      !notification.read && 'ring-1 ring-emerald-500/25'
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -152,7 +156,7 @@ export default function NotificationsPanel({ className }: NotificationsPanelProp
                       </div>
                     </div>
                     {!notification.read && (
-                      <span className="absolute top-3 right-10 h-2 w-2 rounded-full bg-[#1E88E5]" />
+                      <span className="absolute top-3 right-10 h-2 w-2 rounded-full bg-emerald-500" />
                     )}
                   </div>
                 ))}

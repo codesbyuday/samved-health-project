@@ -77,8 +77,8 @@ const staffTypeConfig: Record<StaffType, { label: string; icon: React.ReactNode;
   doctor: { 
     label: 'Doctors', 
     icon: <Stethoscope className="h-4 w-4" />, 
-    color: 'text-blue-600 dark:text-blue-400',
-    bgColor: 'bg-blue-100 dark:bg-blue-900/50' 
+    color: 'text-emerald-700 dark:text-emerald-400',
+    bgColor: 'bg-emerald-100 dark:bg-emerald-950/50' 
   },
   nurse: { 
     label: 'Nurses', 
@@ -296,7 +296,7 @@ export default function StaffManagement() {
         <Card 
           className={cn(
             "cursor-pointer transition-all hover:shadow-md dark:bg-slate-800 dark:border-slate-700",
-            activeTab === 'all' && "ring-2 ring-blue-500"
+            activeTab === 'all' && "ring-2 ring-emerald-600"
           )}
           onClick={() => setActiveTab('all')}
         >
@@ -311,7 +311,7 @@ export default function StaffManagement() {
             key={type}
             className={cn(
               "cursor-pointer transition-all hover:shadow-md dark:bg-slate-800 dark:border-slate-700",
-              activeTab === type && "ring-2 ring-blue-500"
+              activeTab === type && "ring-2 ring-emerald-600"
             )}
             onClick={() => setActiveTab(type as StaffType)}
           >
@@ -471,7 +471,7 @@ export default function StaffManagement() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                              className="h-8 w-8 p-0 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
                               onClick={() => openEditDialog(staff)}
                             >
                               <Edit className="h-4 w-4" />

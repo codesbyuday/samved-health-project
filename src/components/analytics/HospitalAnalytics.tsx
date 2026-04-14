@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const COLORS = ['#1E88E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+const COLORS = ['#047857', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
 export default function HospitalAnalytics() {
   const [timeRange, setTimeRange] = useState('week');
@@ -84,8 +84,8 @@ export default function HospitalAnalytics() {
                 <p className="text-sm font-medium text-slate-500">Total Patients</p>
                 <p className="text-2xl font-bold text-slate-800 mt-1">2,847</p>
               </div>
-              <div className="p-2 rounded-lg bg-blue-50">
-                <Users className="h-5 w-5 text-blue-600" />
+              <div className="p-2 rounded-lg bg-emerald-50">
+                <Users className="h-5 w-5 text-emerald-700" />
               </div>
             </div>
             <div className="flex items-center gap-1 mt-2 text-sm text-green-600">
@@ -162,8 +162,8 @@ export default function HospitalAnalytics() {
               <AreaChart data={analyticsData.patientLoadTrends}>
                 <defs>
                   <linearGradient id="colorPatients" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1E88E5" stopOpacity={0.8} />
-                    <stop offset="95%" stopColor="#1E88E5" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#047857" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#047857" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorEmergencies" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8} />
@@ -185,7 +185,7 @@ export default function HospitalAnalytics() {
                   type="monotone"
                   dataKey="patients"
                   name="OPD Patients"
-                  stroke="#1E88E5"
+                  stroke="#047857"
                   fillOpacity={1}
                   fill="url(#colorPatients)"
                 />
@@ -329,7 +329,7 @@ export default function HospitalAnalytics() {
                 }}
               />
               <Legend />
-              <Bar yAxisId="left" dataKey="patients" name="Patients" fill="#1E88E5" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="left" dataKey="patients" name="Patients" fill="#047857" radius={[4, 4, 0, 0]} />
               <Bar yAxisId="right" dataKey="avgWaitTime" name="Avg Wait (min)" fill="#F59E0B" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

@@ -26,7 +26,7 @@ interface Activity {
 const getActivityIcon = (type: string) => {
   switch (type) {
     case 'patient':
-      return <UserPlus className="h-4 w-4 text-blue-500" />;
+      return <UserPlus className="h-4 w-4 text-emerald-600" />;
     case 'record':
       return <FileText className="h-4 w-4 text-green-500" />;
     case 'disease':
@@ -43,7 +43,7 @@ const getActivityIcon = (type: string) => {
 const getActivityBadge = (type: string) => {
   switch (type) {
     case 'patient':
-      return <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">New Patient</Badge>;
+      return <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">New Patient</Badge>;
     case 'record':
       return <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">Health Record</Badge>;
     case 'disease':
@@ -61,18 +61,22 @@ export default function RecentActivityFeed() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  const loadActivities = async () => {
+  async function loadActivities() {
     setLoading(true);
     const { data } = await dashboardService.getRecentActivities();
     if (data) {
       setActivities(data);
     }
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadActivities();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   if (loading) {
     return (
@@ -82,7 +86,7 @@ export default function RecentActivityFeed() {
         </CardHeader>
         <CardContent>
           <div className="h-[200px] flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
           </div>
         </CardContent>
       </Card>

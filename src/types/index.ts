@@ -1,5 +1,5 @@
 // Hospital Management Portal - TypeScript Types
-// Solapur Municipal Corporation Smart Public Health Management System
+// Hospital Management Portal domain types
 
 // ============ User & Authentication ============
 export interface User {

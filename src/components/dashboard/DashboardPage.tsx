@@ -84,7 +84,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto" />
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mx-auto" />
           <p className="mt-2 text-slate-600 dark:text-slate-400">Loading dashboard data...</p>
         </div>
       </div>
@@ -99,7 +99,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           <p className="mt-2 text-red-600">{error}</p>
           <button 
             onClick={loadDashboardStats}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="mt-4 rounded-xl bg-emerald-700 px-4 py-2 text-white transition-colors hover:bg-emerald-800"
           >
             Retry
           </button>
@@ -109,11 +109,16 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-gradient-to-r from-white via-emerald-50 to-amber-50 p-5 shadow-sm dark:border-emerald-900/60 dark:from-stone-950 dark:via-emerald-950/30 dark:to-amber-950/20">
+        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-amber-300/30 blur-3xl" />
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Dashboard</h2>
+          <p className="mb-2 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200">
+            Command Center
+          </p>
+          <h2 className="text-3xl font-bold text-stone-900 dark:text-white">Hospital Operations Dashboard</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Real-time hospital overview and control panel
           </p>
@@ -124,12 +129,13 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
           <button
             onClick={loadDashboardStats}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-white/80 px-3 py-1.5 text-sm transition-colors hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-stone-950/60 dark:hover:bg-emerald-950/40"
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
         </div>
+      </div>
       </div>
 
       {/* Summary Cards */}
@@ -178,7 +184,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       {/* Quick Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-lg border bg-gradient-to-r from-blue-50 to-white dark:from-blue-950/50 dark:to-slate-900 dark:border-slate-700 transition-colors">
+        <div className="p-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950/40 dark:to-stone-950 dark:border-emerald-900/60 transition-colors">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-500 dark:text-slate-400">Total Citizens</p>

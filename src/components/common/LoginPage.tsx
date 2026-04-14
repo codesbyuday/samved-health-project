@@ -48,33 +48,33 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4 transition-colors duration-300">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50 dark:from-stone-950 dark:via-emerald-950/30 dark:to-stone-950 flex items-center justify-center p-4 transition-colors duration-300">
       {/* Background Pattern */}
       <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-5 dark:opacity-10" />
       
       <div className="w-full max-w-lg relative z-10">
-        {/* Government Branding */}
+        {/* Product Branding */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 px-4 py-2 rounded-full text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-200 px-4 py-2 rounded-full text-sm font-medium mb-4">
             <Shield className="h-4 w-4" />
-            <span>Government of Maharashtra</span>
+            <span>Tech-Lifter Secure Access</span>
           </div>
         </div>
 
         {/* Login Card */}
         <Card className="shadow-2xl border-0 overflow-hidden dark:bg-slate-800 dark:border-slate-700">
           {/* Header with gradient */}
-          <div className="bg-gradient-to-r from-primary to-blue-600 p-6 text-white">
+          <div className="bg-gradient-to-r from-emerald-700 via-teal-600 to-amber-500 p-6 text-white">
             <div className="flex items-center justify-center gap-3 mb-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/20 backdrop-blur">
                 <Hospital className="h-8 w-8 text-white" />
               </div>
             </div>
             <CardTitle className="text-2xl text-center font-bold">
-              SMC Hospital Portal
+              Hospital Management Portal
             </CardTitle>
-            <CardDescription className="text-center text-blue-100 mt-2">
-              Solapur Municipal Corporation - Smart Public Health Management System
+            <CardDescription className="text-center text-amber-50 mt-2">
+              Tech-Lifter Clinical Operations Suite
             </CardDescription>
           </div>
 
@@ -98,7 +98,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="admin.smchospital@solapur.gov.in"
+                    placeholder="doctor@hospital.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 h-11 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder:text-slate-400"
@@ -145,7 +145,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                     Remember me
                   </Label>
                 </div>
-                <a href="#" className="text-sm text-primary dark:text-blue-400 hover:underline">
+                <a href="#" className="text-sm text-primary dark:text-emerald-300 hover:underline">
                   Forgot password?
                 </a>
               </div>
@@ -153,7 +153,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               {/* Login Button */}
               <Button
                 type="submit"
-                className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-medium dark:bg-blue-600 dark:hover:bg-blue-700"
+                className="w-full h-11 text-white font-medium"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -177,9 +177,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 
                 <div className="flex items-center justify-center gap-4 text-xs text-slate-400 dark:text-slate-500">
                   <span>Need Help?</span>
-                  <a href="#" className="text-primary dark:text-blue-400 hover:underline">Contact IT Support</a>
+                  <a href="#" className="text-primary dark:text-emerald-300 hover:underline">Contact IT Support</a>
                   <span className="dark:text-slate-600">|</span>
-                  <a href="#" className="text-primary dark:text-blue-400 hover:underline">User Guide</a>
+                  <a href="#" className="text-primary dark:text-emerald-300 hover:underline">User Guide</a>
                 </div>
               </div>
             </form>
@@ -189,10 +189,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         {/* Footer */}
         <div className="mt-6 text-center">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            © 2025 Solapur Municipal Corporation. All Rights Reserved.
+            Developed by Tech-Lifter
           </p>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Powered by Smart Public Health Management System
+            Powered by Hospital Management Portal
           </p>
         </div>
       </div>

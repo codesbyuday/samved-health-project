@@ -101,7 +101,7 @@ const EQUIPMENT_CATEGORIES = [
 
 // Category colors
 const CATEGORY_COLORS: Record<string, string> = {
-  'Diagnostic': 'bg-blue-50 border-blue-200',
+  'Diagnostic': 'bg-emerald-50 border-emerald-200',
   'Therapeutic': 'bg-purple-50 border-purple-200',
   'Life Support': 'bg-red-50 border-red-200',
   'Monitoring': 'bg-cyan-50 border-cyan-200',
@@ -113,7 +113,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const CATEGORY_TEXT_COLORS: Record<string, string> = {
-  'Diagnostic': 'text-blue-800',
+  'Diagnostic': 'text-emerald-900',
   'Therapeutic': 'text-purple-800',
   'Life Support': 'text-red-800',
   'Monitoring': 'text-cyan-800',
@@ -763,8 +763,8 @@ export default function InfrastructureStatus() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card 
               className={cn(
-                'border-l-4 border-l-blue-500 cursor-pointer transition-all hover:shadow-md',
-                equipmentFilter === 'all' && 'ring-2 ring-blue-300 bg-blue-50/50 dark:bg-blue-950/20'
+                'border-l-4 border-l-emerald-600 cursor-pointer transition-all hover:shadow-md',
+                equipmentFilter === 'all' && 'ring-2 ring-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20'
               )}
               onClick={() => setEquipmentFilter('all')}
             >
@@ -774,8 +774,8 @@ export default function InfrastructureStatus() {
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Equipment</p>
                     <p className="mt-1 text-3xl font-bold text-slate-800 dark:text-white">{equipmentStats.total}</p>
                   </div>
-                  <div className="rounded-xl bg-blue-50 p-3 dark:bg-blue-950/30">
-                    <Activity className="h-6 w-6 text-blue-600" />
+                  <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-950/30">
+                    <Activity className="h-6 w-6 text-emerald-700" />
                   </div>
                 </div>
               </CardContent>
@@ -1027,11 +1027,11 @@ export default function InfrastructureStatus() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 w-7 p-0 hover:bg-blue-50"
+                                className="h-7 w-7 p-0 hover:bg-emerald-50"
                                 onClick={() => openEditEquipmentDialog(eq)}
                                 title="Edit"
                               >
-                                <Edit className="h-3.5 w-3.5 text-blue-600" />
+                                <Edit className="h-3.5 w-3.5 text-emerald-700" />
                               </Button>
                               <Button
                                 size="sm"
@@ -1060,8 +1060,8 @@ export default function InfrastructureStatus() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card 
               className={cn(
-                'border-l-4 border-l-blue-500 cursor-pointer transition-all hover:shadow-md',
-                ambulanceFilter === 'all' && 'ring-2 ring-blue-300 bg-blue-50/50'
+                'border-l-4 border-l-emerald-600 cursor-pointer transition-all hover:shadow-md',
+                ambulanceFilter === 'all' && 'ring-2 ring-emerald-300 bg-emerald-50/50'
               )}
               onClick={() => setAmbulanceFilter('all')}
             >
@@ -1071,8 +1071,8 @@ export default function InfrastructureStatus() {
                     <p className="text-sm font-medium text-slate-500">Total Ambulances</p>
                     <p className="text-3xl font-bold text-slate-800 mt-1">{ambulanceStats.total}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-blue-50">
-                    <Ambulance className="h-6 w-6 text-blue-600" />
+                  <div className="p-3 rounded-xl bg-emerald-50">
+                    <Ambulance className="h-6 w-6 text-emerald-700" />
                   </div>
                 </div>
               </CardContent>
@@ -1196,8 +1196,8 @@ export default function InfrastructureStatus() {
                       className="flex items-center justify-between p-3 hover:bg-slate-50 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 shrink-0">
-                          <Ambulance className="h-4 w-4 text-blue-600" />
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 shrink-0">
+                          <Ambulance className="h-4 w-4 text-emerald-700" />
                         </div>
                         <div>
                           <p className="font-mono font-medium text-slate-800">{amb.ambulance_vehicle_number}</p>
@@ -1243,11 +1243,11 @@ export default function InfrastructureStatus() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-7 w-7 p-0 hover:bg-blue-50"
+                          className="h-7 w-7 p-0 hover:bg-emerald-50"
                           onClick={() => openEditAmbulanceDialog(amb)}
                           title="Edit"
                         >
-                          <Edit className="h-3.5 w-3.5 text-blue-600" />
+                          <Edit className="h-3.5 w-3.5 text-emerald-700" />
                         </Button>
                         <Button
                           size="sm"
@@ -1766,8 +1766,8 @@ export default function InfrastructureStatus() {
                       <p className="text-sm text-slate-500">Not recorded</p>
                     )}
                   </div>
-                  <div className="space-y-1 p-3 bg-blue-50 rounded-lg">
-                    <span className="text-xs font-medium text-blue-700">Updated By</span>
+                  <div className="space-y-1 p-3 bg-emerald-50 rounded-lg">
+                    <span className="text-xs font-medium text-emerald-800">Updated By</span>
                     {viewEquipment.updated_by_staff ? (
                       <>
                         <p className="text-sm font-medium">{viewEquipment.updated_by_staff.name || 'Unknown'}</p>
@@ -1812,10 +1812,10 @@ export default function InfrastructureStatus() {
           </DialogHeader>
           {viewAmbulance && (
             <div className="space-y-4 py-4 overflow-y-auto flex-1 min-h-0">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                    <Ambulance className="h-5 w-5 text-blue-600" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                    <Ambulance className="h-5 w-5 text-emerald-700" />
                   </div>
                   <div>
                     <p className="font-mono font-bold text-lg">{viewAmbulance.ambulance_vehicle_number}</p>

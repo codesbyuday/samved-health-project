@@ -37,7 +37,7 @@ export function DiseaseTrendSection({ topDiseases, timeline }: DiseaseTrendSecti
                 <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} interval={0} angle={-18} textAnchor="end" height={60} />
                 <YAxis tickLine={false} axisLine={false} />
                 <Tooltip />
-                <Bar dataKey="cases" fill="#1E88E5" radius={[10, 10, 0, 0]} />
+                <Bar dataKey="cases" fill="var(--chart-1)" radius={[10, 10, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

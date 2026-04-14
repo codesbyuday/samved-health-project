@@ -91,7 +91,7 @@ const getUrgencyColor = (urgency: string): string => {
     case 'urgent':
       return 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700';
     default:
-      return 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700';
+      return 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800';
   }
 };
 
@@ -103,7 +103,7 @@ const getStatusColor = (status: string): string => {
     case 'rejected':
       return 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400';
     case 'completed':
-      return 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400';
+      return 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400';
     case 'cancelled':
       return 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-400';
     default:
@@ -389,7 +389,7 @@ export default function ReferralManagement() {
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0">
           {/* Header with gradient background */}
-          <DialogHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700 text-white p-6 rounded-t-lg">
+          <DialogHeader className="bg-gradient-to-r from-emerald-700 to-indigo-600 dark:from-emerald-800 dark:to-indigo-700 text-white p-6 rounded-t-lg">
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="flex items-center gap-3 text-xl">
@@ -398,7 +398,7 @@ export default function ReferralManagement() {
                   </div>
                   Referral Details
                 </DialogTitle>
-                <DialogDescription className="text-blue-100 mt-1">
+                <DialogDescription className="text-emerald-100 mt-1">
                   Complete referral information and actions
                 </DialogDescription>
               </div>
@@ -425,7 +425,7 @@ export default function ReferralManagement() {
                 {/* Patient Information Section */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
-                    <User className="h-4 w-4 text-blue-500" />
+                    <User className="h-4 w-4 text-emerald-600" />
                     <span>Patient Information</span>
                   </div>
                   <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
@@ -466,10 +466,10 @@ export default function ReferralManagement() {
                 {/* Transfer Flow Section */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
-                    <ArrowRightLeft className="h-4 w-4 text-blue-500" />
+                    <ArrowRightLeft className="h-4 w-4 text-emerald-600" />
                     <span>Transfer Flow</span>
                   </div>
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                  <div className="bg-gradient-to-br from-emerald-50 to-indigo-50 dark:from-emerald-950/20 dark:to-indigo-900/20 rounded-xl p-4 border border-emerald-200 dark:border-emerald-900">
                     <div className="flex items-center justify-between">
                       {/* From Hospital */}
                       <div className="flex-1">
@@ -484,7 +484,7 @@ export default function ReferralManagement() {
                           {selectedReferral.referring_doctor && (
                             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
                               <div className="flex items-center gap-2">
-                                <Stethoscope className="h-4 w-4 text-blue-500" />
+                                <Stethoscope className="h-4 w-4 text-emerald-600" />
                                 <div>
                                   <p className="text-xs text-slate-400">Referring Staff</p>
                                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -504,17 +504,17 @@ export default function ReferralManagement() {
 
                       {/* Arrow */}
                       <div className="px-4 flex flex-col items-center">
-                        <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-200 dark:shadow-blue-900">
+                        <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-200 dark:shadow-emerald-950">
                           <ArrowRight className="h-5 w-5 text-white" />
                         </div>
                       </div>
 
                       {/* To Hospital */}
                       <div className="flex-1">
-                        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-blue-300 dark:border-blue-700 shadow-sm ring-2 ring-blue-100 dark:ring-blue-900">
+                        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-emerald-300 dark:border-emerald-800 shadow-sm ring-2 ring-emerald-100 dark:ring-emerald-950">
                           <div className="flex items-center gap-2 mb-2">
-                            <Building2 className="h-5 w-5 text-blue-500" />
-                            <span className="text-xs text-blue-500 uppercase tracking-wide">To</span>
+                            <Building2 className="h-5 w-5 text-emerald-600" />
+                            <span className="text-xs text-emerald-600 uppercase tracking-wide">To</span>
                           </div>
                           <p className="font-semibold text-slate-800 dark:text-white">
                             {selectedReferral.to_hospital?.name || 'Unknown Hospital'}
@@ -548,7 +548,7 @@ export default function ReferralManagement() {
                 {/* Reason & Notes Section */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
-                    <FileText className="h-4 w-4 text-blue-500" />
+                    <FileText className="h-4 w-4 text-emerald-600" />
                     <span>Reason & Clinical Notes</span>
                   </div>
                   <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
@@ -582,13 +582,13 @@ export default function ReferralManagement() {
                 {/* Timeline Section */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
-                    <Clock className="h-4 w-4 text-blue-500" />
+                    <Clock className="h-4 w-4 text-emerald-600" />
                     <span>Timeline</span>
                   </div>
                   <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                        <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
+                        <Calendar className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
                       </div>
                       <div>
                         <p className="text-xs text-slate-400">Created</p>

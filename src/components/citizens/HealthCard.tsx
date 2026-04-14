@@ -141,10 +141,10 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
           height: `${cardHeightPx}px`,
           padding: '0.5mm',
           boxSizing: 'border-box',
-          background: 'linear-gradient(160deg, #eef4ff 0%, #f8fbff 45%, #e8f5ee 100%)',
-          borderRadius: '12px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
-          border: '1px solid #c8d8e8',
+          background: 'linear-gradient(135deg, #fff7ed 0%, #fffbeb 42%, #ecfdf5 100%)',
+          borderRadius: '18px',
+          boxShadow: '0 12px 30px rgba(28, 25, 23, 0.18)',
+          border: '1px solid #d6b46a',
           overflow: 'hidden',
           position: 'relative',
           display: 'flex',
@@ -160,14 +160,14 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
             transform: 'translate(-50%, -50%) rotate(-30deg)',
             fontSize: `${cardWidthPx * 0.09}px`,
             fontWeight: 900,
-            color: 'rgba(30, 64, 175, 0.04)',
+            color: 'rgba(4, 120, 87, 0.055)',
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
             userSelect: 'none',
             letterSpacing: '3px',
           }}
         >
-          SMC HEALTH
+          HEALTH CARD
         </div>
 
         {/* ══ HEADER ══ */}
@@ -176,22 +176,22 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
             display: 'flex',
             alignItems: 'center',
             padding: '5px 10px',
-            background: 'linear-gradient(90deg, #1a3a6b 0%, #1e4d8c 60%, #1a5c38 100%)',
+            background: 'linear-gradient(110deg, #064e3b 0%, #0f766e 58%, #b45309 100%)',
             gap: '8px',
             flexShrink: 0,
           }}
         >
           {/* Logo */}
           <img
-            src="/solapur-logo.jpg"
-            alt="SMC"
+            src="/health-logo.png"
+            alt="Hospital Portal"
             crossOrigin="anonymous"
             style={{
               width: '32px',
               height: '32px',
-              borderRadius: '50%',
-              border: '2px solid rgba(255, 255, 255, 0.6)',
-              background: '#ffffff',
+              borderRadius: '12px',
+              border: '2px solid rgba(254, 243, 199, 0.75)',
+              background: '#fffbeb',
               objectFit: 'contain',
               flexShrink: 0,
             }}
@@ -207,11 +207,11 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
                 lineHeight: 1.1,
               }}
             >
-              Solapur Municipal Corporation
+              Hospital Management Portal
             </div>
             <div
               style={{
-                color: '#7edd9c',
+                color: '#fde68a',
                 fontSize: `${cardWidthPx * 0.026}px`,
                 fontWeight: 600,
                 marginTop: '1px',
@@ -224,8 +224,8 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
 
         {/* ══ STRIPE ══ */}
         <div style={{ display: 'flex', height: '2px', flexShrink: 0 }}>
-          <div style={{ flex: 3, background: '#16a34a' }} />
-          <div style={{ flex: 1, background: '#2563eb' }} />
+          <div style={{ flex: 3, background: '#047857' }} />
+          <div style={{ flex: 1, background: '#d97706' }} />
         </div>
 
         {/* ══ BODY - 3 Column Grid ══ */}
@@ -286,7 +286,7 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
             {/* Name */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
               <span style={{
-                color: '#1e40af',
+                color: '#047857',
                 fontSize: `${cardWidthPx * 0.027}px`,
                 fontWeight: 600,
                 minWidth: `${cardWidthPx * 0.12}px`,
@@ -305,7 +305,7 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
             {/* Age / Gender */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
               <span style={{
-                color: '#1e40af',
+                color: '#047857',
                 fontSize: `${cardWidthPx * 0.027}px`,
                 fontWeight: 600,
                 minWidth: `${cardWidthPx * 0.12}px`,
@@ -323,7 +323,7 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
             {/* Blood Group */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
               <span style={{
-                color: '#1e40af',
+                color: '#047857',
                 fontSize: `${cardWidthPx * 0.027}px`,
                 fontWeight: 600,
                 minWidth: `${cardWidthPx * 0.12}px`,
@@ -341,7 +341,7 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
             {/* Ward */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
               <span style={{
-                color: '#1e40af',
+                color: '#047857',
                 fontSize: `${cardWidthPx * 0.027}px`,
                 fontWeight: 600,
                 minWidth: `${cardWidthPx * 0.12}px`,
@@ -362,19 +362,19 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
               alignItems: 'baseline',
               gap: '4px',
               marginTop: '2px',
-              background: 'rgba(30, 64, 175, 0.08)',
-              borderRadius: '3px',
+              background: 'rgba(4, 120, 87, 0.10)',
+              borderRadius: '8px',
               padding: '2px 5px',
             }}>
               <span style={{
-                color: '#1e40af',
+                color: '#047857',
                 fontSize: `${cardWidthPx * 0.027}px`,
                 fontWeight: 700,
               }}>
                 Health ID:
               </span>
               <span style={{
-                color: '#1e3a8a',
+                color: '#065f46',
                 fontSize: `${cardWidthPx * 0.028}px`,
                 fontWeight: 800,
                 fontFamily: "'Courier New', monospace",
@@ -433,15 +433,15 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
 
         {/* ══ FOOTER STRIPE ══ */}
         <div style={{ display: 'flex', height: '2px', flexShrink: 0 }}>
-          <div style={{ flex: 1, background: '#16a34a' }} />
-          <div style={{ flex: 1, background: '#2563eb' }} />
-          <div style={{ flex: 1, background: '#16a34a' }} />
+          <div style={{ flex: 1, background: '#047857' }} />
+          <div style={{ flex: 1, background: '#d97706' }} />
+          <div style={{ flex: 1, background: '#047857' }} />
         </div>
 
         {/* ══ FOOTER ══ */}
         <div
           style={{
-            background: 'linear-gradient(90deg, #1a3a6b 0%, #1e4d8c 60%, #1a5c38 100%)',
+            background: 'linear-gradient(110deg, #064e3b 0%, #0f766e 58%, #b45309 100%)',
             padding: '4px 10px',
             display: 'flex',
             justifyContent: 'space-between',
@@ -478,14 +478,14 @@ export default function HealthCard({ citizen, wardName, compact = false }: Healt
           alignItems: 'center',
           gap: '8px',
           padding: '10px 24px',
-          background: isDownloading ? '#94a3b8' : '#1e40af',
+          background: isDownloading ? '#a8a29e' : 'linear-gradient(90deg, #047857, #d97706)',
           color: '#ffffff',
           border: 'none',
-          borderRadius: '8px',
+          borderRadius: '999px',
           fontSize: '14px',
           fontWeight: 600,
           cursor: isDownloading ? 'not-allowed' : 'pointer',
-          boxShadow: isDownloading ? 'none' : '0 4px 12px rgba(30, 64, 175, 0.3)',
+          boxShadow: isDownloading ? 'none' : '0 8px 18px rgba(4, 120, 87, 0.28)',
           transition: 'background-color 0.2s',
         }}
       >

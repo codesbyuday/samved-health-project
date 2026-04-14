@@ -13,7 +13,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
       value: `${summary.totalToday} / ${summary.totalWeek} / ${summary.totalMonth}`,
       helper: "Today / 7 days / 30 days",
       icon: Activity,
-      accent: "from-blue-100 to-white text-blue-700 dark:from-blue-950/40 dark:to-slate-900 dark:text-blue-300",
+      accent: "from-emerald-100 to-white text-emerald-800 dark:from-emerald-950/40 dark:to-stone-950 dark:text-emerald-200",
     },
     {
       label: "Active Cases",

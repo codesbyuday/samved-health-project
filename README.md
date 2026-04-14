@@ -1,6 +1,6 @@
-# SAMVED Hospital Management Web Portal
+# Hospital Management Portal
 
-Hospital Management Web Portal for the **Smart Unified Public Health System (SAMVED)** developed for **Solapur Municipal Corporation**.
+Premium Hospital Management Web Portal developed by **Tech-Lifter** for hospital-side clinical and operational workflows.
 
 This portal is designed for hospital-side operations and is used by:
 
@@ -13,7 +13,7 @@ It supports secure hospital workflows such as patient record management, appoint
 
 ## Description
 
-The SAMVED Hospital Portal is a modern web application built to digitize and centralize day-to-day hospital operations under a unified public health system. It connects hospital staff with operational, clinical, and analytics workflows while maintaining hospital-level data isolation and secure access control.
+The Hospital Management Portal is a modern web application built to digitize and centralize day-to-day hospital operations. It connects hospital staff with operational, clinical, and analytics workflows while maintaining hospital-level data isolation and secure access control.
 
 The system is structured to support both:
 
@@ -216,4 +216,4 @@ src/
 
 ## License
 
-This project is intended for institutional/public health deployment under the SAMVED Hackathon initiative. 
+This project is intended for institutional healthcare deployment and academic demonstration by Tech-Lifter.

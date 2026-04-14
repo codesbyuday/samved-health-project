@@ -1,5 +1,5 @@
 // Hospital Management Portal - Dummy Data
-// Solapur Municipal Corporation Smart Public Health Management System
+// Hospital Management Portal sample data
 
 import {
   User,
@@ -29,7 +29,7 @@ export const currentUser: User = {
   name: 'Dr. Rajesh Patil',
   role: 'admin',
   hospitalId: 'HOSP001',
-  hospitalName: 'Solapur Municipal Corporation Hospital',
+  hospitalName: 'Tech-Lifter Hospital',
   avatar: '/avatars/admin.png',
 };
 

@@ -81,7 +81,7 @@ import AccessDenied from '@/components/auth/AccessDenied';
 import { useRBAC } from '@/hooks/use-rbac';
 
 const statusColors: Record<string, string> = {
-  booked: 'bg-blue-100 text-blue-700 border-blue-200',
+  booked: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   confirmed: 'bg-green-100 text-green-700 border-green-200',
   cancelled: 'bg-red-100 text-red-700 border-red-200',
   completed: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -380,7 +380,7 @@ export default function AppointmentTable() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
       </div>
     );
   }
@@ -398,7 +398,7 @@ export default function AppointmentTable() {
           <p className="text-sm text-slate-500 mt-1">Manage patient appointments and scheduling</p>
         </div>
         {canManageAppointments ? (
-          <Button onClick={() => setShowNewDialog(true)} className="bg-[#1E88E5] hover:bg-[#1565C0]">
+          <Button onClick={() => setShowNewDialog(true)} className="bg-[#047857] hover:bg-[#065F46]">
             <Plus className="h-4 w-4 mr-2" />
             Book New Appointment
           </Button>
@@ -479,7 +479,7 @@ export default function AppointmentTable() {
                   <TableRow key={apt.appointment_id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[#1E88E5] to-blue-600 flex items-center justify-center">
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[#047857] to-emerald-700 flex items-center justify-center">
                           <User className="h-4 w-4 text-white" />
                         </div>
                         <div>
@@ -528,7 +528,7 @@ export default function AppointmentTable() {
                         )}
                         {canManageAppointments && (apt.status === 'booked' || apt.status === 'confirmed') && (
                           <>
-                            <Button size="sm" variant="ghost" className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleReschedule(apt)} title="Reschedule">
+                            <Button size="sm" variant="ghost" className="h-8 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50" onClick={() => handleReschedule(apt)} title="Reschedule">
                               <RotateCcw className="h-4 w-4" />
                             </Button>
                             <Button size="sm" variant="ghost" className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleCancel(apt)} title="Cancel">

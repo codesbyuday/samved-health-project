@@ -737,11 +737,11 @@ export default function MedicineStockComponent() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 w-7 p-0 hover:bg-blue-50"
+                            className="h-7 w-7 p-0 hover:bg-emerald-50"
                             onClick={() => openEditDialog(stock)}
                             title="Edit"
                           >
-                            <Edit className="h-3.5 w-3.5 text-blue-600" />
+                            <Edit className="h-3.5 w-3.5 text-emerald-700" />
                           </Button>
                           <Button
                             size="sm"
@@ -775,8 +775,8 @@ export default function MedicineStockComponent() {
           {selectedStock && (
             <div className="space-y-4 py-4 overflow-y-auto flex-1 min-h-0">
               {/* Medicine Info */}
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <h4 className="text-sm font-medium text-blue-700 mb-1">Medicine</h4>
+              <div className="p-3 bg-emerald-50 rounded-lg">
+                <h4 className="text-sm font-medium text-emerald-800 mb-1">Medicine</h4>
                 <p className="text-lg font-bold text-slate-800">
                   {selectedStock.medicine?.medicine_name || 'Unknown Medicine'}
                 </p>
@@ -893,8 +893,8 @@ export default function MedicineStockComponent() {
                       <p className="text-sm text-slate-500">Not recorded</p>
                     )}
                   </div>
-                  <div className="space-y-1 p-3 bg-blue-50 rounded-lg">
-                    <span className="text-xs font-medium text-blue-700">Updated By</span>
+                  <div className="space-y-1 p-3 bg-emerald-50 rounded-lg">
+                    <span className="text-xs font-medium text-emerald-800">Updated By</span>
                     {selectedStock.updated_by_staff ? (
                       <>
                         <p className="text-sm font-medium">{selectedStock.updated_by_staff.name || 'Unknown'}</p>

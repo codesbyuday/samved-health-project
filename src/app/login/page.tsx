@@ -72,16 +72,16 @@ function LoginPageContent() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-slate-100 px-4 py-10 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-amber-50 via-white to-emerald-50 px-4 py-10 dark:from-stone-950 dark:via-emerald-950/30 dark:to-stone-950">
       <Card className="w-full max-w-md border-slate-200 shadow-xl dark:border-slate-800 dark:bg-slate-900">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1E88E5] to-blue-700 text-white shadow-lg">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 via-teal-600 to-amber-400 text-white shadow-lg shadow-emerald-900/20">
             <Hospital className="h-7 w-7" />
           </div>
           <div className="space-y-1">
             <CardTitle className="text-2xl">Hospital Staff Login</CardTitle>
             <CardDescription>
-              Sign in with your registered email or phone to access the SMC Smart Health System.
+              Sign in with your registered email or phone to access the Tech-Lifter Hospital Management Portal.
             </CardDescription>
           </div>
           <div className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 dark:bg-orange-950/40 dark:text-orange-300">
