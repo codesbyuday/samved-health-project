@@ -1,0 +1,6 @@
+{
+  "framework": "nextjs",
+  "installCommand": "npm --prefix Samved-hospital install",
+  "buildCommand": "npm --prefix Samved-hospital run build",
+  "outputDirectory": "Samved-hospital/.next"
+}

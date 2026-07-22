@@ -11,5 +11,8 @@
     "db:generate": "npm --prefix Samved-hospital run db:generate",
     "db:migrate": "npm --prefix Samved-hospital run db:migrate",
     "db:reset": "npm --prefix Samved-hospital run db:reset"
+  },
+  "devDependencies": {
+    "next": "^16.1.1"
   }
 }
