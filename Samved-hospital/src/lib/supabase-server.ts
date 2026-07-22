@@ -2,13 +2,12 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const defaultUrl = 'https://yxknckhlzcjybjbdqnbg.supabase.co';
+const defaultKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a25ja2hsemNqeWJqYmRxbmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTY4MTYsImV4cCI6MjA4ODg5MjgxNn0.MA64InqN_hkdrLHPDP3WCigPkTJFlk-mhKEdNa5MPSk';
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase server environment variables.");
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || defaultUrl;
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || defaultKey;
 
 export const supabaseServer = createClient(supabaseUrl, supabaseKey, {
   auth: {
