@@ -10,6 +10,18 @@ const initialForm = {
   price: '',
 };
 
+function getTestIcon(name = '', category = '') {
+  const n = name.toLowerCase();
+  const c = category.toLowerCase();
+  if (n.includes('blood') || n.includes('cbc') || c.includes('hemato')) return 'fa-droplet text-red-500';
+  if (n.includes('thyroid') || c.includes('endo')) return 'fa-dna text-purple-500';
+  if (n.includes('heart') || n.includes('ecg') || n.includes('troponin') || c.includes('cardio')) return 'fa-heart-pulse text-rose-500';
+  if (n.includes('crp') || c.includes('immuno')) return 'fa-shield-halved text-emerald-500';
+  if (n.includes('lipid') || c.includes('bioch')) return 'fa-flask-vial text-amber-500';
+  if (n.includes('dengue') || n.includes('malaria') || c.includes('infect')) return 'fa-virus text-teal-500';
+  return 'fa-vials text-emerald-600';
+}
+
 const TestCatalog = () => {
   const { providerCatalog, createCatalogTest, saving } = useAppData();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,20 +49,24 @@ const TestCatalog = () => {
       </div>
 
       <div className="card-grid">
-        {providerCatalog.map((test) => (
-          <article key={test.lab_test_id} className="panel catalog-card">
-            <div className="stat-icon">
-              <i className="fa-solid fa-vial"></i>
-            </div>
-            <h3 className="subsection-title mt-4">{test.test_types?.test_name || `Test ${test.test_type_id}`}</h3>
-            <p className="row-copy mt-2">{test.test_types?.test_category || 'Uncategorized'}</p>
-            <p className="row-copy mt-3">{test.test_types?.description || 'No description added yet.'}</p>
-            <div className="catalog-footer">
-              <span className="catalog-price">{formatCurrency(test.price)}</span>
-              <span className="status-pill">Live</span>
-            </div>
-          </article>
-        ))}
+        {providerCatalog.map((test) => {
+          const testName = test.test_types?.test_name || `Test ${test.test_type_id}`;
+          const testCat = test.test_types?.test_category || 'Uncategorized';
+          return (
+            <article key={test.lab_test_id} className="panel catalog-card">
+              <div className="stat-icon flex items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 p-3">
+                <i className={`fa-solid ${getTestIcon(testName, testCat)} text-xl`}></i>
+              </div>
+              <h3 className="subsection-title mt-4">{testName}</h3>
+              <p className="row-copy mt-2">{testCat}</p>
+              <p className="row-copy mt-3">{test.test_types?.description || 'No description added yet.'}</p>
+              <div className="catalog-footer">
+                <span className="catalog-price">{formatCurrency(test.price)}</span>
+                <span className="status-pill">Live</span>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Test to Catalog">

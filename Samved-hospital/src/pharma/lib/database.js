@@ -43,8 +43,16 @@ const tableConfig = {
 };
 
 const supabaseConfig = {
-  url: getEnv("VITE_SUPABASE_URL") || getEnv("NEXT_PUBLIC_SUPABASE_URL"),
-  anonKey: getEnv("VITE_SUPABASE_ANON_KEY") || getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+  url:
+    (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_SUPABASE_URL) ||
+    (typeof process !== "undefined" && process.env && process.env.VITE_SUPABASE_URL) ||
+    (typeof import.meta !== "undefined" && import.meta?.env?.VITE_SUPABASE_URL) ||
+    "https://yxknckhlzcjybjbdqnbg.supabase.co",
+  anonKey:
+    (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
+    (typeof process !== "undefined" && process.env && process.env.VITE_SUPABASE_ANON_KEY) ||
+    (typeof import.meta !== "undefined" && import.meta?.env?.VITE_SUPABASE_ANON_KEY) ||
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a25ja2hsemNqeWJqYmRxbmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTY4MTYsImV4cCI6MjA4ODg5MjgxNn0.MA64InqN_hkdrLHPDP3WCigPkTJFlk-mhKEdNa5MPSk",
 };
 
 let mockState = {
