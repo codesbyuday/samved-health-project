@@ -12,7 +12,9 @@
     "db:migrate": "npm --prefix Samved-hospital run db:migrate",
     "db:reset": "npm --prefix Samved-hospital run db:reset"
   },
-  "devDependencies": {
-    "next": "^16.1.1"
+  "dependencies": {
+    "next": "^16.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }
