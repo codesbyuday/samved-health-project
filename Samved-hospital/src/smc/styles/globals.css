@@ -1,0 +1,30 @@
+.smc-theme {
+  min-height: 100%;
+}
+
+.smc-theme *,
+.smc-theme *::before,
+.smc-theme *::after {
+  transition:
+    background-color 240ms ease,
+    border-color 240ms ease,
+    color 240ms ease,
+    box-shadow 240ms ease;
+}
+
+.smc-theme .surface {
+  border-radius: 0.75rem;
+}
+
+.smc-theme .page-shell {
+  min-height: 100vh;
+  background: transparent;
+  color: inherit;
+}
+
+.smc-theme .metric-value {
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
