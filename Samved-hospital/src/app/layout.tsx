@@ -5,18 +5,18 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 
 export const metadata: Metadata = {
-  title: "Hospital Management Portal | Tech-Lifter",
-  description: "Premium hospital operations portal for patient records, appointments, infrastructure, referrals, medicines, disease analytics, and role-based clinical workflows.",
-  keywords: ["Hospital Management", "Healthcare", "Tech-Lifter", "Patient Records", "Medical Portal", "Hospital Operations"],
+  title: "SAMVED Smart Health Management System | Integrated Healthcare Ecosystem",
+  description: "Unified Smart City Health Management System connecting Municipal Governance (SMC), Hospital Operations, Pharmacy Supply Chain, and Diagnostic Laboratories.",
+  keywords: ["Smart Health Management System", "Healthcare Ecosystem", "SAMVED", "Hospital Management", "SMC Governance", "Pharma Portal", "Diagnostic Labs"],
   authors: [{ name: "Tech-Lifter" }],
   icons: {
     icon: "/health-logo.png",
   },
   openGraph: {
-    title: "Hospital Management Portal",
-    description: "Hospital operations and patient records portal by Tech-Lifter",
+    title: "SAMVED Smart Health Management System",
+    description: "Unified Smart City Health System by Tech-Lifter",
     url: "https://tech-lifter.health",
-    siteName: "Hospital Management Portal",
+    siteName: "SAMVED Smart Health Management System",
     type: "website",
   },
 };

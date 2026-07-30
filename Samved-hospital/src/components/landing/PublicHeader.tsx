@@ -12,16 +12,16 @@ export function PublicHeader() {
     <header className="sticky top-0 z-20 border-b border-white/60 bg-white/80 backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/80">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 via-teal-600 to-amber-400 text-white shadow-lg shadow-emerald-900/20">
-            <Hospital className="h-5 w-5" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-500 text-white shadow-lg shadow-teal-900/20">
+            <Activity className="h-6 w-6" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900 dark:text-white sm:text-base">
-              Hospital Management Portal
+            <p className="truncate text-base font-bold text-slate-900 dark:text-white sm:text-lg">
+              Smart Health Management System
             </p>
-            <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-              <Activity className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Tech-Lifter hospital operations suite</span>
+            <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span className="truncate">Integrated Smart City Health Ecosystem</span>
             </p>
           </div>
         </div>
