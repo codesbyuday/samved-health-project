@@ -43,7 +43,7 @@ export function LoginOptionsDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="w-[95vw] max-w-5xl rounded-[1.75rem] border border-slate-200/80 p-5 shadow-2xl backdrop-blur-xl sm:p-7 dark:border-slate-800 dark:bg-slate-950/95">
+      <DialogContent className="w-[92vw] max-w-6xl rounded-[2rem] border border-slate-200/80 p-6 sm:p-8 shadow-2xl backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-xl font-bold tracking-tight sm:text-2xl">
             Choose Portal Access
