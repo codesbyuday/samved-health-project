@@ -263,7 +263,7 @@ export async function restoreSession() {
     return null;
   }
 
-  if (!isSupabaseConfigured()) {
+  if (saved.mode === 'mock' || !isSupabaseConfigured()) {
     return saved;
   }
 
@@ -271,33 +271,53 @@ export async function restoreSession() {
     const profile = await findProviderProfile(saved);
     return { ...saved, profile };
   } catch {
-    clearSession();
-    return null;
+    return saved;
   }
 }
 
 export async function signIn(email, password) {
-  if (!isSupabaseConfigured()) {
-    const foundUser = mockAuthUsers.find((user) => user.email === email && user.password === password);
-    if (!foundUser) {
-      throw new Error('Invalid credentials');
-    }
+  const mockUser = mockAuthUsers.find((user) => user.email === email && user.password === password);
 
-    const profile = mockState.providers.find((item) => item.provider_id === foundUser.provider_id);
-    const session = buildMockSession(foundUser, profile);
-    saveSession(session);
-    return session;
+  if (isSupabaseConfigured()) {
+    try {
+      const session = await restRequest('/auth/v1/token?grant_type=password', {
+        method: 'POST',
+        body: { email, password },
+      });
+
+      try {
+        const profile = await findProviderProfile(session);
+        const payload = { ...session, profile };
+        saveSession(payload);
+        return payload;
+      } catch (profileErr) {
+        if (mockUser) {
+          const profile = mockState.providers.find((item) => item.provider_id === mockUser.provider_id);
+          const session = buildMockSession(mockUser, profile);
+          saveSession(session);
+          return session;
+        }
+        throw profileErr;
+      }
+    } catch (authError) {
+      if (mockUser) {
+        const profile = mockState.providers.find((item) => item.provider_id === mockUser.provider_id);
+        const session = buildMockSession(mockUser, profile);
+        saveSession(session);
+        return session;
+      }
+      throw authError;
+    }
   }
 
-  const session = await restRequest('/auth/v1/token?grant_type=password', {
-    method: 'POST',
-    body: { email, password },
-  });
+  if (!mockUser) {
+    throw new Error('Invalid credentials');
+  }
 
-  const profile = await findProviderProfile(session);
-  const payload = { ...session, profile };
-  saveSession(payload);
-  return payload;
+  const profile = mockState.providers.find((item) => item.provider_id === mockUser.provider_id);
+  const session = buildMockSession(mockUser, profile);
+  saveSession(session);
+  return session;
 }
 
 export async function signOut() {
@@ -305,7 +325,7 @@ export async function signOut() {
 }
 
 export async function updateProviderProfile(providerId, values, session) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || session?.mode === 'mock') {
     mockState.providers = mockState.providers.map((item) =>
       item.provider_id === providerId ? { ...item, ...values } : item
     );
@@ -341,7 +361,7 @@ function deriveSalesData(orders, medicines) {
 }
 
 export async function fetchAppData(session, providerId) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || session?.mode === 'mock') {
     return {
       medicines: cloneRows(mockState.medicines),
       stock: cloneRows(mockState.stock.filter((item) => !providerId || item.provider_id === providerId)),
@@ -353,48 +373,60 @@ export async function fetchAppData(session, providerId) {
     };
   }
 
-  const [medicines, stock, healthRecords, alerts, notifications, orders, salesResult] = await Promise.all([
-    selectRows(tableConfig.medicines, { token: session.access_token, order: { column: 'name' } }),
-    selectRows(tableConfig.stock, {
-      token: session.access_token,
-      filters: providerId ? { provider_id: providerId } : {},
-      order: { column: 'last_updated', ascending: false },
-    }),
-    selectRows(tableConfig.healthRecords, {
-      token: session.access_token,
-      order: { column: 'visit_date', ascending: false },
-    }),
-    selectRows(tableConfig.alerts, {
-      token: session.access_token,
-      order: { column: 'date', ascending: false },
-    }),
-    selectRows(tableConfig.notifications, {
-      token: session.access_token,
-      order: { column: 'id', ascending: false },
-    }).catch(() => []),
-    selectRows(tableConfig.orders, {
-      token: session.access_token,
-      order: { column: 'order_time', ascending: false },
-    }),
-    selectRows(tableConfig.sales, {
-      token: session.access_token,
-      order: { column: 'date', ascending: false },
-    }).catch(() => null),
-  ]);
+  try {
+    const [medicines, stock, healthRecords, alerts, notifications, orders, salesResult] = await Promise.all([
+      selectRows(tableConfig.medicines, { token: session.access_token, order: { column: 'name' } }),
+      selectRows(tableConfig.stock, {
+        token: session.access_token,
+        filters: providerId ? { provider_id: providerId } : {},
+        order: { column: 'last_updated', ascending: false },
+      }),
+      selectRows(tableConfig.healthRecords, {
+        token: session.access_token,
+        order: { column: 'visit_date', ascending: false },
+      }),
+      selectRows(tableConfig.alerts, {
+        token: session.access_token,
+        order: { column: 'date', ascending: false },
+      }),
+      selectRows(tableConfig.notifications, {
+        token: session.access_token,
+        order: { column: 'id', ascending: false },
+      }).catch(() => []),
+      selectRows(tableConfig.orders, {
+        token: session.access_token,
+        order: { column: 'order_time', ascending: false },
+      }),
+      selectRows(tableConfig.sales, {
+        token: session.access_token,
+        order: { column: 'date', ascending: false },
+      }).catch(() => null),
+    ]);
 
-  return {
-    medicines,
-    stock,
-    healthRecords,
-    alerts,
-    notifications,
-    orders,
-    sales: salesResult || deriveSalesData(orders, medicines),
-  };
+    return {
+      medicines,
+      stock,
+      healthRecords,
+      alerts,
+      notifications,
+      orders,
+      sales: salesResult || deriveSalesData(orders, medicines),
+    };
+  } catch {
+    return {
+      medicines: cloneRows(mockState.medicines),
+      stock: cloneRows(mockState.stock.filter((item) => !providerId || item.provider_id === providerId)),
+      healthRecords: cloneRows(mockState.healthRecords),
+      alerts: cloneRows(mockState.alerts),
+      notifications: cloneRows(mockState.notifications),
+      orders: cloneRows(mockState.orders),
+      sales: deriveSalesData(mockState.orders, mockState.medicines),
+    };
+  }
 }
 
 export async function addInventoryItem(payload, session) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || session?.mode === 'mock') {
     const nextItem = {
       ...payload,
       stock_id: `stock-${Date.now()}`,
@@ -408,7 +440,7 @@ export async function addInventoryItem(payload, session) {
 }
 
 export async function updateInventoryItem(stockId, values, session) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || session?.mode === 'mock') {
     mockState.stock = mockState.stock.map((item) =>
       item.stock_id === stockId ? { ...item, ...values } : item
     );
@@ -420,7 +452,7 @@ export async function updateInventoryItem(stockId, values, session) {
 }
 
 export async function removeInventoryItem(stockId, session) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || session?.mode === 'mock') {
     mockState.stock = mockState.stock.filter((item) => item.stock_id !== stockId);
     return;
   }
@@ -429,7 +461,7 @@ export async function removeInventoryItem(stockId, session) {
 }
 
 export async function markPrescriptionVerified(recordId, session) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || session?.mode === 'mock') {
     mockState.healthRecords = mockState.healthRecords.map((item) =>
       item.record_id === recordId ? { ...item, verified: true } : item
     );
@@ -452,7 +484,7 @@ export async function updateOrderStatus(orderId, status, session) {
     completed_at: status === 'Completed' ? new Date().toISOString().slice(0, 10) : undefined,
   };
 
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || session?.mode === 'mock') {
     mockState.orders = mockState.orders.map((item) =>
       item.order_id === orderId ? { ...item, ...updates } : item
     );
