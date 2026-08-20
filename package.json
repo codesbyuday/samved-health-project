@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix Samved-hospital run dev",
-    "build": "npm --prefix Samved-hospital run build",
-    "start": "npm --prefix Samved-hospital run start",
-    "lint": "npm --prefix Samved-hospital run lint",
-    "db:push": "npm --prefix Samved-hospital run db:push",
-    "db:generate": "npm --prefix Samved-hospital run db:generate",
-    "db:migrate": "npm --prefix Samved-hospital run db:migrate",
-    "db:reset": "npm --prefix Samved-hospital run db:reset"
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start",
+    "lint": "npm --prefix frontend run lint",
+    "db:push": "npm --prefix frontend run db:push",
+    "db:generate": "npm --prefix frontend run db:generate",
+    "db:migrate": "npm --prefix frontend run db:migrate",
+    "db:reset": "npm --prefix frontend run db:reset"
   },
   "dependencies": {
     "next": "^16.1.1",
