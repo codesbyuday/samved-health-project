@@ -170,20 +170,96 @@ class AuthService:
 
         # Check Citizens
         citizen_rows = await supabase_http_client.select("citizens", {"user_id": f"eq.{user_id}"})
+        if not citizen_rows and auth_user.get("phone"):
+            citizen_rows = await supabase_http_client.select("citizens", {"phone": f"eq.{auth_user.get('phone')}"})
+
         if citizen_rows:
             citizen = citizen_rows[0]
             return UserProfileSchema(
                 user_id=auth_user["id"],
                 access_role="citizen",
-                name=citizen.get("name"),
+                name=citizen.get("name") or auth_user.get("email", "Citizen"),
                 email=auth_user.get("email"),
                 role="citizen",
                 roles=["citizen"],
                 phone=citizen.get("phone") or auth_user.get("phone"),
-                address=citizen.get("address")
+                address=citizen.get("address"),
+                citizen_id=citizen.get("citizen_id"),
+                ward_number=citizen.get("ward_number")
             )
 
         return None
+
+    async def register_citizen(self, req) -> Tuple[bool, Optional[str], Optional[UserProfileSchema], Optional[str]]:
+        import uuid
+        from app.core.security import get_password_hash
+        
+        clean_phone = (getattr(req, "phone", None) or "").strip()
+        clean_email = (getattr(req, "email", None) or f"{clean_phone}@citizen.samved.in").strip()
+        clean_name = (getattr(req, "name", None) or "Citizen").strip()
+        password = getattr(req, "password", "")
+        
+        if not clean_phone or not password:
+            return False, None, None, "Phone and password are required"
+
+        existing_users = await supabase_http_client.select("auth_users", {"phone": f"eq.{clean_phone}"})
+        if existing_users:
+            return False, None, None, "An account with this mobile number already exists"
+
+        user_id = str(uuid.uuid4())
+        citizen_id = f"CTZ-{uuid.uuid4().hex[:8].upper()}"
+        pwd_hash = get_password_hash(password)
+
+        auth_data = {
+            "id": user_id,
+            "email": clean_email,
+            "phone": clean_phone,
+            "password_hash": pwd_hash,
+            "role": "citizen"
+        }
+        await supabase_http_client.insert("auth_users", auth_data)
+
+        ward_num = getattr(req, "ward_number", None) or 1
+        gender_val = getattr(req, "gender", None)
+        address_val = getattr(req, "address", None)
+        dob_val = getattr(req, "date_of_birth", None)
+        blood_group_val = getattr(req, "blood_group", None)
+        aadhar_val = getattr(req, "aadhar_id", None)
+
+        citizen_data = {
+            "citizen_id": citizen_id,
+            "user_id": user_id,
+            "name": clean_name,
+            "phone": clean_phone,
+            "ward_number": ward_num,
+        }
+        if gender_val:
+            citizen_data["gender"] = gender_val
+        if address_val:
+            citizen_data["address"] = address_val
+        if dob_val:
+            citizen_data["date_of_birth"] = dob_val
+        if blood_group_val:
+            citizen_data["blood_group"] = blood_group_val
+        if aadhar_val:
+            citizen_data["aadhar_id"] = aadhar_val
+
+        await supabase_http_client.insert("citizens", citizen_data)
+
+        user_profile = UserProfileSchema(
+            user_id=user_id,
+            access_role="citizen",
+            name=clean_name,
+            email=clean_email,
+            role="citizen",
+            roles=["citizen"],
+            phone=clean_phone,
+            address=address_val,
+            citizen_id=citizen_id,
+            ward_number=ward_num,
+        )
+        token = create_access_token(subject={"user_id": user_id, "role": "citizen"})
+        return True, token, user_profile, None
 
 
 auth_service = AuthService()

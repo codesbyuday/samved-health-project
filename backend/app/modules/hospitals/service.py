@@ -16,42 +16,76 @@ class HospitalService:
         rows = await supabase_http_client.select("hospitals", {"hospital_id": f"eq.{hospital_id}"})
         return rows[0] if rows else None
 
-    async def get_doctors(self, hospital_id: Optional[str] = None, department: Optional[str] = None) -> List[dict]:
-        import asyncio
+    async def get_departments(self, hospital_id: Optional[str] = None) -> List[str]:
         from app.core.cache import cache_manager
-
-        cache_key = f"doctors_list_{hospital_id or 'all'}_{department or 'all'}"
+        cache_key = f"hospital_departments_{hospital_id or 'all'}"
         cached = await cache_manager.get(cache_key)
         if cached is not None:
             return cached
 
-        doc_query = {}
-        if department:
-            doc_query["specialization"] = f"eq.{department}"
+        query = {"role": "eq.doctor"}
+        if hospital_id:
+            query["hospital_id"] = f"eq.{hospital_id}"
 
-        stf_query = {}
+        staff = await supabase_http_client.select("hospital_staff", query)
+        depts = sorted(list({s.get("department") for s in staff if isinstance(s, dict) and s.get("department")}))
+        if not depts:
+            depts = [
+                "Cardiology", "Dermatology", "ENT", "General Medicine",
+                "Gynecology", "Neurology", "Orthopedics", "Pediatrics"
+            ]
+        await cache_manager.set(cache_key, depts, ttl_seconds=600)
+        return depts
+
+    async def get_doctors(self, hospital_id: Optional[str] = None, department: Optional[str] = None) -> List[dict]:
+        import asyncio
+        from app.core.cache import cache_manager
+
+        cache_key = f"doctors_list_v2_{hospital_id or 'all'}_{department or 'all'}"
+        cached = await cache_manager.get(cache_key)
+        if cached is not None:
+            return cached
+
+        stf_query = {"role": "eq.doctor"}
         if hospital_id:
             stf_query["hospital_id"] = f"eq.{hospital_id}"
 
-        doc_task = supabase_http_client.select("doctors", doc_query)
         stf_task = supabase_http_client.select("hospital_staff", stf_query)
+        doc_task = supabase_http_client.select("doctors")
+        hosp_task = supabase_http_client.select("hospitals", {"select": "hospital_id,name"})
 
-        doc_raw, stf_raw = await asyncio.gather(doc_task, stf_task, return_exceptions=True)
+        stf_raw, doc_raw, hosp_raw = await asyncio.gather(stf_task, doc_task, hosp_task, return_exceptions=True)
 
-        doctor_rows = doc_raw if isinstance(doc_raw, list) else []
         staff_rows = stf_raw if isinstance(stf_raw, list) else []
+        doctor_rows = doc_raw if isinstance(doc_raw, list) else []
+        hosp_rows = hosp_raw if isinstance(hosp_raw, list) else []
 
-        staff_map = {s["staff_uuid"]: s for s in staff_rows if isinstance(s, dict) and "staff_uuid" in s}
+        doc_map = {d["staff_uuid"]: d for d in doctor_rows if isinstance(d, dict) and "staff_uuid" in d}
+        hosp_map = {h["hospital_id"]: h.get("name") for h in hosp_rows if isinstance(h, dict) and "hospital_id" in h}
 
         result = []
-        for d in doctor_rows:
-            if not isinstance(d, dict):
+        dept_filter = department.strip().lower() if department else None
+
+        for s in staff_rows:
+            if not isinstance(s, dict):
                 continue
-            s_uuid = d.get("staff_uuid")
-            if hospital_id and s_uuid and s_uuid not in staff_map:
-                continue
-            s_data = staff_map.get(s_uuid, {})
-            result.append({**s_data, **d})
+            s_uuid = s.get("staff_uuid")
+            s_dept = (s.get("department") or "").strip()
+            d_data = doc_map.get(s_uuid, {})
+            d_spec = (d_data.get("specialization") or "").strip()
+
+            if dept_filter:
+                if dept_filter != s_dept.lower() and dept_filter != d_spec.lower():
+                    continue
+
+            h_id = s.get("hospital_id")
+            result.append({
+                **d_data,
+                **s,
+                "hospital_name": hosp_map.get(h_id) or "Solapur Municipal Hospital",
+                "specialization": d_spec or s_dept,
+                "consultation_time": d_data.get("consultation_time") or 15,
+            })
 
         await cache_manager.set(cache_key, result, ttl_seconds=300)
         return result

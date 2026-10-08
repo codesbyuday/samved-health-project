@@ -19,9 +19,12 @@ async def login(req: LoginRequest):
     return LoginResponse(success=True, token=token, user=user)
 
 
-@router.post("/register", response_model=AuthActionResponse)
+@router.post("/register", response_model=LoginResponse)
 async def register(req: RegisterRequest):
-    return AuthActionResponse(success=True, message="User registered successfully. Please verify email if required.")
+    success, token, user, error_msg = await auth_service.register_citizen(req)
+    if not success:
+        return LoginResponse(success=False, error=error_msg or "Registration failed")
+    return LoginResponse(success=True, token=token, user=user)
 
 
 @router.post("/logout", response_model=AuthActionResponse)

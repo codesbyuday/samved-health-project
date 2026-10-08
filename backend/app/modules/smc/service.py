@@ -131,14 +131,22 @@ class SMCService:
         cached = await cache_manager.get("smc_campaigns_list")
         if cached is not None:
             return cached
-        campaigns = await supabase_http_client.select("vaccination_campaigns", {"order": "created_at.desc"})
+        campaigns = await supabase_http_client.select("vaccination_campaigns", {"order": "date.desc"})
         await cache_manager.set("smc_campaigns_list", campaigns, ttl_seconds=300)
         return campaigns
 
     async def create_campaign(self, payload: VaccinationCampaignCreateSchema) -> dict:
         from app.core.cache import cache_manager
         data = payload.model_dump(exclude_unset=True, mode="json")
-        data["campaign_id"] = f"VAC-{uuid.uuid4().hex[:8].upper()}"
+        data["campaign_id"] = str(uuid.uuid4())
+        if "title" in data and "name" not in data:
+            data["name"] = data.pop("title")
+        if "vaccine_name" in data and "vaccine_type" not in data:
+            data["vaccine_type"] = data.pop("vaccine_name")
+        if "target_ward" in data and "ward_id" not in data:
+            data["ward_id"] = data.pop("target_ward")
+        if "start_date" in data and "date" not in data:
+            data["date"] = data.pop("start_date")
         res = await supabase_http_client.insert("vaccination_campaigns", data)
         await cache_manager.delete("smc_campaigns_list")
         return res[0] if res else data

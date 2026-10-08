@@ -16,10 +16,17 @@ class NotificationCreateSchema(BaseModel):
 
 
 @router.get("")
-async def get_notifications(recipient_id: Optional[str] = Query(None)):
-    query = {"order": "created_at.desc"}
-    if recipient_id:
-        query["recipient_id"] = f"eq.{recipient_id}"
+async def get_notifications(
+    recipient_id: Optional[str] = Query(None),
+    ward_number: Optional[int] = Query(None)
+):
+    query = {"order": "created_at.desc", "limit": "50"}
+    if recipient_id and ward_number:
+        query["or"] = f"(target_user_id.eq.{recipient_id},target_ward_number.eq.{ward_number},target_type.eq.broadcast)"
+    elif recipient_id:
+        query["or"] = f"(target_user_id.eq.{recipient_id},target_type.eq.broadcast)"
+    elif ward_number:
+        query["or"] = f"(target_ward_number.eq.{ward_number},target_type.eq.broadcast)"
     return await supabase_http_client.select("notifications", query)
 
 

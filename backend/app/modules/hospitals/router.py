@@ -13,6 +13,19 @@ async def get_hospitals():
     return await hospital_service.get_all_hospitals()
 
 
+@router.get("/departments", response_model=List[str])
+async def get_hospital_departments(hospital_id: Optional[str] = Query(None)):
+    return await hospital_service.get_departments(hospital_id=hospital_id)
+
+
+@router.get("/doctors", response_model=List[DoctorSchema])
+async def get_all_doctors(
+    hospital_id: Optional[str] = Query(None),
+    department: Optional[str] = Query(None)
+):
+    return await hospital_service.get_doctors(hospital_id=hospital_id, department=department)
+
+
 @router.get("/{hospital_id}", response_model=HospitalSchema)
 async def get_hospital(hospital_id: str):
     h = await hospital_service.get_hospital_by_id(hospital_id)

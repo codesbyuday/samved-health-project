@@ -52,9 +52,17 @@ class AppointmentService:
         from app.core.cache import cache_manager
         data = payload.model_dump(exclude_unset=True, mode="json")
         data["appointment_id"] = f"APT-{uuid.uuid4().hex[:8].upper()}"
-        data["status"] = data.get("status") or "Scheduled"
+        data["status"] = "booked"
 
-        existing = await supabase_http_client.select("appointments", {"hospital_id": f"eq.{data.get('hospital_id')}"})
+        h_id = data.get("hospital_id")
+        apt_date = data.get("appointment_date")
+        query = {}
+        if h_id:
+            query["hospital_id"] = f"eq.{h_id}"
+        if apt_date:
+            query["appointment_date"] = f"eq.{apt_date}"
+
+        existing = await supabase_http_client.select("appointments", query) if query else []
         data["token_id"] = len(existing) + 1
 
         res = await supabase_http_client.insert("appointments", data)

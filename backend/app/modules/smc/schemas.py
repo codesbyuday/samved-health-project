@@ -1,5 +1,5 @@
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+from typing import Optional, List, Dict, Any, Union
+from pydantic import BaseModel, ConfigDict
 from datetime import date
 
 
@@ -44,13 +44,20 @@ class AlertSchema(AlertCreateSchema):
 
 
 class VaccinationCampaignCreateSchema(BaseModel):
-    title: str
+    name: Optional[str] = None
+    title: Optional[str] = None
+    vaccine_type: Optional[str] = None
+    vaccine_name: Optional[str] = None
+    ward_id: Optional[int] = None
     target_ward: Optional[int] = None
-    vaccine_name: str
-    status: Optional[str] = "Planned"
+    date: Optional[Union[date, str]] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
-    target_count: Optional[int] = 0
+    target_population: Optional[str] = None
+    target_count: Optional[int] = None
+    status: Optional[str] = "scheduled"
+
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
 
 
 class VaccinationCampaignSchema(VaccinationCampaignCreateSchema):

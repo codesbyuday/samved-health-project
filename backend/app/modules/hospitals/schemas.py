@@ -18,6 +18,7 @@ class DoctorSchema(BaseModel):
     staff_uuid: str
     name: Optional[str] = None
     hospital_id: Optional[str] = None
+    hospital_name: Optional[str] = None
     specialization: Optional[str] = None
     department: Optional[str] = None
     phone: Optional[str] = None

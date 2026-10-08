@@ -13,11 +13,17 @@ class LoginRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    email: str
+    email: Optional[str] = None
     password: str
     name: Optional[str] = None
     phone: Optional[str] = None
     role: Optional[str] = "citizen"
+    ward_number: Optional[int] = 1
+    gender: Optional[str] = None
+    address: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    blood_group: Optional[str] = None
+    aadhar_id: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -50,6 +56,8 @@ class UserProfileSchema(BaseModel):
     address: Optional[str] = None
     joined_at: Optional[str] = None
     official_id: Optional[str] = None
+    citizen_id: Optional[str] = None
+    ward_number: Optional[int] = None
 
 
 class LoginResponse(BaseModel):
