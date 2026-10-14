@@ -28,8 +28,13 @@ ENV/
 
 # Environment Variables
 .env
+.env.*
 .env.local
 .env.*.local
+
+backend/.env
+backend/.env.*
+!backend/.env.example
 
 # IDEs & OS
 .vscode/

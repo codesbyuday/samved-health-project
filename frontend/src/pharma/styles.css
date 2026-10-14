@@ -7,9 +7,9 @@
   --panel-strong: #ffffff;
   --panel-muted: #eef4f3;
   --border: rgba(18, 58, 60, 0.12);
-  --text-main: #163233;
-  --text-soft: #617579;
-  --text-faint: #7f9194;
+  --text-main: #0f2728;
+  --text-soft: #384e51;
+  --text-faint: #52686b;
   --brand: #127c7d;
   --brand-strong: #0d5f60;
   --brand-soft: rgba(18, 124, 125, 0.12);
@@ -21,7 +21,10 @@
   --backdrop: rgba(7, 18, 20, 0.45);
 }
 
-:root[data-theme='dark'] {
+:root[data-theme='dark'],
+:root.dark,
+html.dark,
+body.dark {
   color-scheme: dark;
   --bg: #071619;
   --bg-accent: radial-gradient(circle at top left, rgba(39, 153, 157, 0.2), transparent 30%),
@@ -253,7 +256,9 @@ select {
   color: var(--text-soft);
 }
 
-.brand-mark {
+.pharma-app .brand-mark,
+.pharma-shell .brand-mark,
+[data-portal='pharma'] .brand-mark {
   background: linear-gradient(135deg, rgba(18, 124, 125, 0.18), rgba(35, 161, 159, 0.08));
   color: var(--brand);
 }

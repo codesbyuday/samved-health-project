@@ -283,19 +283,35 @@ export async function getDiseaseSurveillanceData(searchParams: SearchParams) {
   const wardFilterDigits = wardFilterRaw.replace(/\D+/g, "");
   const wardFilterText = wardFilterRaw.replace(/\s+/g, " ");
 
-  const weeklyBuckets = Array.from({ length: 6 }, (_, index) =>
-    startOfWeek(subWeeks(new Date(), 5 - index), { weekStartsOn: 1 }),
-  );
-  const earliestDate = from ?? format(weeklyBuckets[0], "yyyy-MM-dd");
-  const latestDate = to ?? format(endOfDay(new Date()), "yyyy-MM-dd");
-
-  const casesQuery = supabase
+  let casesQuery = supabase
     .from("disease_cases")
-    .select("disease_id, report_date, diseases(disease_name), hospitals!inner(ward_id)")
-    .gte("report_date", earliestDate)
-    .lte("report_date", latestDate);
+    .select("disease_id, report_date, diseases(disease_name), hospitals!inner(ward_id)");
 
-  const { data: cases } = await casesQuery;
+  if (from) {
+    casesQuery = casesQuery.gte("report_date", from);
+  }
+  if (to) {
+    casesQuery = casesQuery.lte("report_date", to);
+  }
+
+  let { data: cases } = await casesQuery;
+
+  // Determine anchor date for the 6 weekly buckets: use explicit 'to' or latest available report_date
+  let anchorDate = new Date();
+  if (to) {
+    anchorDate = new Date(to);
+  } else if (cases && cases.length > 0) {
+    const validDates = cases
+      .map((c) => new Date(c.report_date ?? 0).getTime())
+      .filter((t) => !isNaN(t) && t > 0);
+    if (validDates.length > 0) {
+      anchorDate = new Date(Math.max(...validDates));
+    }
+  }
+
+  const weeklyBuckets = Array.from({ length: 6 }, (_, index) =>
+    startOfWeek(subWeeks(anchorDate, 5 - index), { weekStartsOn: 1 }),
+  );
   const grouped = new Map<
     string,
     {
@@ -366,6 +382,108 @@ export async function getDiseaseSurveillanceData(searchParams: SearchParams) {
     evaluateOutbreakSignals(entry),
   );
 
+  const [{ data: sentNotifications }, { data: dbOutbreakSignals }] = await Promise.all([
+    supabase
+      .from("notifications")
+      .select("target_ward_number, related_entity, created_at")
+      .like("related_entity", "disease-outbreak:%")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("outbreak_signals")
+      .select("*"),
+  ]);
+
+  const dbSignalsMap = new Map<string, any>();
+  (dbOutbreakSignals ?? []).forEach((sig) => {
+    if (sig.ward_number && sig.disease_id) {
+      dbSignalsMap.set(`${sig.ward_number}:${sig.disease_id}`, sig);
+    }
+  });
+
+  // 1. Augment grouped cases with persisted outbreak signals
+  surveillanceRows.forEach((row) => {
+    const key = `${row.wardNumber}:${row.diseaseId}`;
+    const dbSig = dbSignalsMap.get(key);
+    if (dbSig) {
+      row.aiSummary = dbSig.ai_summary || row.explanation;
+      if (dbSig.risk_level) {
+        row.riskLevel = dbSig.risk_level.toUpperCase() as any;
+      }
+      if (dbSig.early_outbreak_signal !== undefined) {
+        row.earlyOutbreakSignal = Boolean(dbSig.early_outbreak_signal);
+      } else if (String(dbSig.risk_level).toLowerCase() === "high" || String(dbSig.risk_level).toLowerCase() === "medium") {
+        row.earlyOutbreakSignal = true;
+      }
+      if (dbSig.outbreak_score) {
+        row.abnormalityScore = Number(dbSig.outbreak_score);
+      }
+      if (dbSig.current_week_cases !== undefined && dbSig.current_week_cases !== null) {
+        row.currentWeekCases = Number(dbSig.current_week_cases);
+      }
+      if (dbSig.previous_week_cases !== undefined && dbSig.previous_week_cases !== null) {
+        row.previousWeekCases = Number(dbSig.previous_week_cases);
+      }
+      if (dbSig.explanation) {
+        row.explanation = dbSig.explanation;
+      }
+
+      // Recalculate growth rate & trend
+      if (dbSig.growth_rate !== undefined && dbSig.growth_rate !== null && Number(dbSig.growth_rate) !== 0) {
+        row.growthRate = Number(dbSig.growth_rate);
+      } else if (row.previousWeekCases > 0) {
+        row.growthRate = Math.round(((row.currentWeekCases - row.previousWeekCases) / row.previousWeekCases) * 1000) / 10;
+      } else if (row.currentWeekCases > 0) {
+        row.growthRate = 100;
+      } else {
+        row.growthRate = 0;
+      }
+
+      row.growthTrend = row.growthRate > 5 ? "Increase" : row.growthRate < -5 ? "Decrease" : "Stable";
+    }
+  });
+
+  // 2. Ensure all persisted dbOutbreakSignals are present in surveillanceRows
+  (dbOutbreakSignals ?? []).forEach((sig: any) => {
+    const exists = surveillanceRows.some(
+      (r) => r.wardNumber === Number(sig.ward_number) && r.diseaseId === sig.disease_id
+    );
+    if (!exists) {
+      const wardNumber = Number(sig.ward_number);
+      const wardName = sig.ward_name || wardsLookup.get(wardNumber)?.ward_name || `Ward ${wardNumber}`;
+      const risk = (String(sig.risk_level || "low").toUpperCase()) as "LOW" | "MEDIUM" | "HIGH";
+      const isOutbreak = sig.early_outbreak_signal !== undefined ? Boolean(sig.early_outbreak_signal) : (risk === "HIGH" || risk === "MEDIUM");
+      const currentWeekCases = Number(sig.current_week_cases || 0);
+      const previousWeekCases = Number(sig.previous_week_cases || 0);
+      const growthRate = sig.growth_rate !== undefined && sig.growth_rate !== null && Number(sig.growth_rate) !== 0
+        ? Number(sig.growth_rate)
+        : (previousWeekCases > 0 ? Math.round(((currentWeekCases - previousWeekCases) / previousWeekCases) * 1000) / 10 : (currentWeekCases > 0 ? 100 : 0));
+
+      surveillanceRows.push({
+        wardNumber,
+        wardName,
+        diseaseId: sig.disease_id,
+        diseaseName: sig.disease_name || sig.disease_id,
+        currentWeekCases,
+        previousWeekCases,
+        growthRate,
+        growthTrend: growthRate > 5 ? "Increase" : growthRate < -5 ? "Decrease" : "Stable",
+        riskLevel: risk,
+        earlyOutbreakSignal: isOutbreak,
+        ruleTriggered: risk === "HIGH",
+        trendTriggered: true,
+        anomalyTriggered: isOutbreak,
+        abnormalityScore: Number(sig.outbreak_score || 0),
+        weeklyHistory: [],
+        alertMessage: `Early warning: Possible outbreak of ${sig.disease_name} in Ward ${wardNumber}`,
+        citizenPreview: `Health notice for Ward ${wardNumber}: Health teams are monitoring localized cases of ${sig.disease_name}.`,
+        explanation: sig.explanation || `Flagged due to elevated surveillance triggers and growth rate.`,
+        aiSummary: sig.ai_summary || null,
+      });
+    }
+  });
+
+  // 3. Filter by disease
   if (diseaseFilter && diseaseFilter !== "all") {
     surveillanceRows = surveillanceRows.filter(
       (row) =>
@@ -374,13 +492,32 @@ export async function getDiseaseSurveillanceData(searchParams: SearchParams) {
     );
   }
 
+  // 4. Filter by ward
+  if (wardFilterDigits || (wardFilterText && wardFilterText !== "")) {
+    surveillanceRows = surveillanceRows.filter((row) => {
+      const wNum = String(row.wardNumber);
+      const wName = (row.wardName || "").toLowerCase();
+      return (
+        (wardFilterDigits && wNum === wardFilterDigits) ||
+        wNum === wardFilterText ||
+        `ward ${wNum}` === wardFilterText ||
+        wName.includes(wardFilterText)
+      );
+    });
+  }
+
+  // 5. Sort: high risk and early outbreak signals first, then by abnormality score
+  surveillanceRows.sort((a, b) => {
+    if (a.earlyOutbreakSignal && !b.earlyOutbreakSignal) return -1;
+    if (!a.earlyOutbreakSignal && b.earlyOutbreakSignal) return 1;
+    if (a.riskLevel === "HIGH" && b.riskLevel !== "HIGH") return -1;
+    if (a.riskLevel !== "HIGH" && b.riskLevel === "HIGH") return 1;
+    return b.abnormalityScore - a.abnormalityScore;
+  });
+
+  // 6. Paginate AFTER augmenting, sorting, and filtering
+  const totalPages = Math.max(1, Math.ceil(surveillanceRows.length / pageSize));
   const pagedRows = surveillanceRows.slice((page - 1) * pageSize, page * pageSize);
-  const { data: sentNotifications } = await supabase
-    .from("notifications")
-    .select("target_ward_number, related_entity, created_at")
-    .like("related_entity", "disease-outbreak:%")
-    .order("created_at", { ascending: false })
-    .limit(100);
 
   const sentMap = new Map<string, string>();
   (sentNotifications ?? []).forEach((notification) => {
@@ -432,7 +569,7 @@ export async function getDiseaseSurveillanceData(searchParams: SearchParams) {
       healthIndex: 0,
       outbreakScore: row.abnormalityScore,
       riskLevel: row.riskLevel.toLowerCase(),
-      aiSummary: row.explanation,
+      aiSummary: row.aiSummary || row.explanation,
       createdAt: null,
       updatedAt: null,
     }));
@@ -458,6 +595,7 @@ export async function getDiseaseSurveillanceData(searchParams: SearchParams) {
       anomalyTriggered: row.anomalyTriggered,
       abnormalityScore: row.abnormalityScore,
       explanation: row.explanation,
+      aiSummary: row.aiSummary || row.explanation,
       citizenPreview: row.citizenPreview,
       alertMessage: row.alertMessage,
     })),

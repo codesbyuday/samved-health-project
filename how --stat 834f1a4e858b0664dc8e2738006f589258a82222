@@ -1,0 +1,10 @@
+[33m834f1a4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mrefactor/fastapi-backend-architecture[m[33m)[m added the hospital, lab, pharmacy registration and modified and fixes the many bugs in the smc portal, improve the ui of the pharmacy and lab added some tables and storage buckets in supabase, resolve manu logical and functional bugs present in the lab and pharmacy portal and remove the all dummy or static hardcoded data from the frontend
+[33m549acb1[m[33m ([m[1;31morigin/refactor/fastapi-backend-architecture[m[33m)[m feat(citizen-app): overhaul backend data integration, ward metrics, campaigns, appointments and auth
+[33m06762aa[m refactor: restructure SAMVED into modular FastAPI backend
+[33m7087cfc[m[33m ([m[1;31morigin/main[m[33m, [m[1;32mmain[m[33m)[m Fix desktop modal layout width for portal login selection
+[33mae391ec[m Redesign main landing page header and hero section for Smart City Health Management System & improve login portal modal
+[33m8682699[m Fix pharmacy dashboard mock authentication fallback for pharmacy@health.gov
+[33m4450676[m Fix vercel.json duplicate subfolder path in install and build commands
+[33mbb1ffd4[m Trigger Vercel deployment for latest commit 57d01e6
+[33m57d01e6[m Add fallback Supabase credentials for Vercel production deployment
+[33m373912d[m[33m ([m[1;31morigin/newupdatedcode[m[33m)[m Fix Vercel root package.json framework detection dependencies

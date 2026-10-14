@@ -127,6 +127,8 @@
     min-height: 100vh;
   }
 
+  html.dark body,
+  body.dark,
   .dark body {
     background-image:
       radial-gradient(circle at top left, rgb(16 185 129 / 0.16), transparent 30rem),

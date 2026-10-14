@@ -10,21 +10,27 @@ import Login from './pages/Login';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
-import Prescriptions from './pages/Prescriptions';
 import Orders from './pages/Orders';
 import Sales from './pages/Sales';
 import RareMedicines from './pages/RareMedicines';
 import DemandSignals from './pages/DemandSignals';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
+import PendingApproval from './pages/PendingApproval';
 import './styles.css';
 
 const ProtectedLayout = ({ children }) => {
-  const { user, authReady } = useAuth();
+  const { user, pharmacyProfile, authReady } = useAuth();
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center text-soft">Restoring your dashboard session...</div>;
   }
   if (!user) return <Navigate to="/login" replace />;
+
+  const status = (pharmacyProfile?.status || 'approved').toLowerCase();
+  if (status === 'pending' || status === 'rejected') {
+    return <PendingApproval />;
+  }
+
   return <Layout>{children}</Layout>;
 };
 
@@ -39,7 +45,6 @@ function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
                 <Route path="/inventory" element={<ProtectedLayout><Inventory /></ProtectedLayout>} />
-                <Route path="/prescriptions" element={<ProtectedLayout><Prescriptions /></ProtectedLayout>} />
                 <Route path="/orders" element={<ProtectedLayout><Orders /></ProtectedLayout>} />
                 <Route path="/sales" element={<ProtectedLayout><Sales /></ProtectedLayout>} />
                 <Route path="/rare-medicines" element={<ProtectedLayout><RareMedicines /></ProtectedLayout>} />

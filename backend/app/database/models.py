@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from typing import Optional
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
+    Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, func
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.connection import Base
@@ -47,7 +47,17 @@ class Hospital(Base):
     contact_number: Mapped[Optional[str]] = mapped_column(String)
     email: Mapped[Optional[str]] = mapped_column(String)
     verified_by_smc: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
+    status: Mapped[Optional[str]] = mapped_column(String, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class HospitalDocument(Base):
+    __tablename__ = "hospital_documents"
+
+    document_id: Mapped[str] = mapped_column(String, primary_key=True)
+    hospital_id: Mapped[str] = mapped_column(String, ForeignKey("hospitals.hospital_id"))
+    document_type: Mapped[str] = mapped_column(String)
+    file_url: Mapped[str] = mapped_column(String)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class HospitalStaff(Base):
@@ -65,6 +75,7 @@ class HospitalStaff(Base):
     address: Mapped[Optional[str]] = mapped_column(Text)
     shift: Mapped[Optional[str]] = mapped_column(String)
     status: Mapped[Optional[str]] = mapped_column(String)
+    salary: Mapped[Optional[float]] = mapped_column(Numeric)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -184,6 +195,7 @@ class DiagnosticReport(Base):
     hospital_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("hospitals.hospital_id"))
     provider_id: Mapped[Optional[str]] = mapped_column(String)
     test_type_id: Mapped[Optional[int]] = mapped_column(Integer)
+    booking_id: Mapped[Optional[str]] = mapped_column(String)
     result: Mapped[Optional[str]] = mapped_column(Text)
     description: Mapped[Optional[str]] = mapped_column(Text)
     report_file_url: Mapped[Optional[str]] = mapped_column(String)
@@ -199,6 +211,30 @@ class TestType(Base):
     test_name: Mapped[Optional[str]] = mapped_column(String)
     test_category: Mapped[Optional[str]] = mapped_column(String)
     description: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class LabBooking(Base):
+    __tablename__ = "lab_bookings"
+
+    booking_id: Mapped[str] = mapped_column(String, primary_key=True)
+    citizen_id: Mapped[str] = mapped_column(String, ForeignKey("citizens.citizen_id"))
+    provider_id: Mapped[str] = mapped_column(String)
+    test_type_id: Mapped[int] = mapped_column(Integer, ForeignKey("test_types.test_id"))
+    booking_date: Mapped[date] = mapped_column(Date)
+    time_slot: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="booked")
+    sample_type: Mapped[Optional[str]] = mapped_column(String)
+    specimen_tube: Mapped[Optional[str]] = mapped_column(String)
+    sample_collected_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    collected_by: Mapped[Optional[str]] = mapped_column(String)
+    analysis_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    price: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), default=0.0)
+    payment_status: Mapped[Optional[str]] = mapped_column(String, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class Appointment(Base):

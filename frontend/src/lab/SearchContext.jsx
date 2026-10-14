@@ -22,8 +22,9 @@ export const SearchProvider = ({ children }) => {
         (patient) =>
           patient.name?.toLowerCase().includes(term) || patient.citizen_id?.toLowerCase().includes(term),
       ),
-      bookings: appointments.filter(
+      bookings: (appointments || []).filter(
         (booking) =>
+          booking.booking_id?.toLowerCase().includes(term) ||
           booking.appointment_id?.toLowerCase().includes(term) ||
           booking.citizen_id?.toLowerCase().includes(term) ||
           booking.citizens?.name?.toLowerCase().includes(term),

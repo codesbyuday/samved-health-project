@@ -24,7 +24,8 @@ export type ModuleKey =
   | "medicine-stock"
   | "staff-management"
   | "complaints"
-  | "settings";
+  | "settings"
+  | "documents";
 
 export type AccessLevel = "none" | "view" | "partial" | "full";
 
@@ -171,6 +172,7 @@ const moduleActionMap: Record<ModuleKey, PermissionAction[]> = {
   "staff-management": ["staff-management.manage", "staff-management.view"],
   complaints: ["complaints.manage", "complaints.view"],
   settings: ["dashboard.view"],
+  documents: ["dashboard.view"],
 };
 
 export function normalizeRole(role: string | null | undefined): UserRole | null {
@@ -196,7 +198,7 @@ export function hasHospitalAccess(userHospitalId: string | null | undefined, rec
 }
 
 export function getModuleAccess(role: string | null | undefined, moduleKey: ModuleKey): AccessLevel {
-  if (moduleKey === "settings") {
+  if (moduleKey === "settings" || moduleKey === "documents") {
     return role ? "full" : "none";
   }
 

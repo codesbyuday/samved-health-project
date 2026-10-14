@@ -70,9 +70,14 @@ export function LoginOptionsDialog({
                 <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 sm:text-sm">
                   Access patient records, appointments, lab reports, referrals, bed inventory, and hospital dashboards.
                 </p>
-                <Button className="w-full bg-emerald-700 font-semibold text-white hover:bg-emerald-800" onClick={() => handleNavigate("/login")}>
-                  Continue to Hospital <ArrowRight className="ml-1.5 h-4 w-4" />
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button className="w-full bg-emerald-700 font-semibold text-white hover:bg-emerald-800" onClick={() => handleNavigate("/login")}>
+                    Continue to Hospital <ArrowRight className="ml-1.5 h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" className="w-full border-emerald-200 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-900/50 text-xs" onClick={() => handleNavigate("/register/hospital")}>
+                    Register New Hospital
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -112,20 +117,25 @@ export function LoginOptionsDialog({
                 <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 sm:text-sm">
                   Access pharmacy inventory, prescription processing, stock alerts, sales analytics, and rare drug requests.
                 </p>
-                <Button className="w-full bg-teal-700 font-semibold text-white hover:bg-teal-800" onClick={() => handleNavigate("/pharma/login")}>
-                  Continue to Pharma <ArrowRight className="ml-1.5 h-4 w-4" />
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button className="w-full bg-teal-700 font-semibold text-white hover:bg-teal-800" onClick={() => handleNavigate("/pharma/login")}>
+                    Continue to Pharma <ArrowRight className="ml-1.5 h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" className="w-full border-teal-200 text-teal-800 hover:bg-teal-50 dark:border-teal-800 dark:text-teal-300 dark:hover:bg-teal-900/50 text-xs" onClick={() => handleNavigate("/register/pharmacy")}>
+                    Register New Pharmacy
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
             {/* Lab Card */}
-            <Card className="flex flex-col justify-between border-purple-100 bg-gradient-to-br from-white via-purple-50/70 to-indigo-50/60 shadow-md transition-transform hover:-translate-y-1 dark:border-purple-900/60 dark:from-stone-950 dark:via-purple-950/30 dark:to-indigo-950/20">
+            <Card className="flex flex-col justify-between border-cyan-100 bg-gradient-to-br from-white via-cyan-50/70 to-teal-50/60 shadow-md transition-transform hover:-translate-y-1 dark:border-cyan-900/60 dark:from-stone-950 dark:via-cyan-950/30 dark:to-teal-950/20">
               <CardHeader className="space-y-3 pb-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-500 text-white shadow-lg shadow-purple-900/20">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-cyan-900/20">
                     <FlaskConical className="h-5 w-5" />
                   </div>
-                  <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300">Lab</Badge>
+                  <Badge variant="secondary" className="bg-cyan-100 text-cyan-800 dark:bg-cyan-900/60 dark:text-cyan-300">Lab</Badge>
                 </div>
                 <CardTitle className="text-lg font-bold">Lab Login</CardTitle>
               </CardHeader>
@@ -133,9 +143,14 @@ export function LoginOptionsDialog({
                 <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 sm:text-sm">
                   Access diagnostic lab test bookings, sample collection workflows, report uploads, and test catalogs.
                 </p>
-                <Button className="w-full bg-purple-700 font-semibold text-white hover:bg-purple-800" onClick={() => handleNavigate("/lab/login")}>
-                  Continue to Lab <ArrowRight className="ml-1.5 h-4 w-4" />
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button className="w-full bg-cyan-700 font-semibold text-white hover:bg-cyan-800" onClick={() => handleNavigate("/lab")}>
+                    Continue to Lab <ArrowRight className="ml-1.5 h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" className="w-full border-cyan-200 text-cyan-800 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300 dark:hover:bg-cyan-900/50 text-xs" onClick={() => handleNavigate("/register/lab")}>
+                    Register Diagnostic Lab
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -12,6 +12,7 @@ export const sidebarItems = [
   { href: "/smc/disease-surveillance", label: "Disease Surveillance" },
   { href: "/smc/hospitals", label: "Hospitals" },
   { href: "/smc/hospital-infrastructure", label: "Hospital Infrastructure" },
+  { href: "/smc/providers", label: "Providers (Pharmacies & Labs)" },
   { href: "/smc/citizen-complaints", label: "Citizen Complaints" },
   { href: "/smc/vaccination-campaigns", label: "Vaccination Campaigns" },
   { href: "/smc/emergency-response", label: "Emergency Response" },

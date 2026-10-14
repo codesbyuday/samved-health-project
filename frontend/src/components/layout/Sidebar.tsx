@@ -36,7 +36,8 @@ export type PageType =
   | 'medicine-stock'
   | 'complaints'
   | 'staff-management'
-  | 'settings';
+  | 'settings'
+  | 'documents';
 
 interface SidebarProps {
   currentPage: PageType;
@@ -117,6 +118,11 @@ const navItems: NavItem[] = [
     label: 'Complaints',
     icon: <MessageSquareWarning className="h-5 w-5" />,
     badge: 4,
+  },
+  {
+    id: 'documents',
+    label: 'Hospital Documents',
+    icon: <FileText className="h-5 w-5" />,
   },
   {
     id: 'settings',

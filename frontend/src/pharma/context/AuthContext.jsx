@@ -67,8 +67,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const refreshStatus = async () => {
+    if (!pharmacyProfile?.provider_id) return null;
+    try {
+      const res = await fetch(`/api/pharmacy/documents?provider_id=${pharmacyProfile.provider_id}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          const updatedProfile = {
+            ...pharmacyProfile,
+            ...(data.provider || {}),
+            status: data.status || 'approved',
+            documents: data.documents || [],
+          };
+          setPharmacyProfile(updatedProfile);
+          setSession((prev) => (prev ? { ...prev, profile: updatedProfile } : prev));
+          const storage = typeof window !== 'undefined' ? window.localStorage : null;
+          if (storage && session) {
+            storage.setItem('pharma-dashboard-session', JSON.stringify({ ...session, profile: updatedProfile }));
+          }
+          return data.status;
+        }
+      }
+    } catch (err) {
+      console.warn('refreshStatus error:', err);
+    }
+    return pharmacyProfile?.status || 'approved';
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, pharmacyProfile, authReady, authError, login, logout, updateProfile }}>
+    <AuthContext.Provider value={{ session, user, pharmacyProfile, authReady, authError, login, logout, updateProfile, refreshStatus }}>
       {children}
     </AuthContext.Provider>
   );

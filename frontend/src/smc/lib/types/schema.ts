@@ -135,6 +135,7 @@ export type DiseaseSurveillanceRow = {
   anomalyTriggered: boolean;
   abnormalityScore: number;
   explanation: string;
+  aiSummary?: string;
   citizenPreview: string;
   alertMessage: string;
 };

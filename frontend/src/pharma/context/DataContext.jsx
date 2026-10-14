@@ -2,12 +2,13 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import {
   addInventoryItem,
+  createPharmacyOrder,
+  editPharmacyOrder,
   fetchAppData,
   isSupabaseConfigured,
-  markPrescriptionVerified,
   removeInventoryItem,
   updateInventoryItem,
-  updateOrderStatus,
+  updatePharmacyOrderStatus,
 } from '../lib/database';
 
 const DataContext = createContext(null);
@@ -84,8 +85,10 @@ export const DataProvider = ({ children }) => {
     createStockItem: (payload) => runMutation(() => addInventoryItem(payload, session)),
     saveStockItem: (stockId, values) => runMutation(() => updateInventoryItem(stockId, values, session)),
     deleteStockItem: (stockId) => runMutation(() => removeInventoryItem(stockId, session)),
-    verifyPrescription: (recordId) => runMutation(() => markPrescriptionVerified(recordId, session)),
-    saveOrderStatus: (orderId, status) => runMutation(() => updateOrderStatus(orderId, status, session)),
+    createOrder: (payload) => runMutation(() => createPharmacyOrder(payload, session)),
+    updateOrderStatus: (orderId, status) => runMutation(() => updatePharmacyOrderStatus(orderId, status, session)),
+    saveOrderStatus: (orderId, status) => runMutation(() => updatePharmacyOrderStatus(orderId, status, session)),
+    editOrder: (orderId, updates) => runMutation(() => editPharmacyOrder(orderId, updates, session)),
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

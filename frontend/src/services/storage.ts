@@ -164,6 +164,25 @@ export const storageService = {
    */
   async viewOrDownloadFile(path: string, action: 'view' | 'download' = 'view'): Promise<{ success: boolean; error: string | null }> {
     try {
+      if (!path) {
+        return { success: false, error: 'File path or URL is missing.' };
+      }
+
+      // If it's already an external HTTP/HTTPS URL, handle directly
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        if (action === 'view') {
+          window.open(path, '_blank');
+        } else {
+          const link = window.document.createElement('a');
+          link.href = path;
+          link.download = path.split('/').pop() || 'report';
+          window.document.body.appendChild(link);
+          link.click();
+          window.document.body.removeChild(link);
+        }
+        return { success: true, error: null };
+      }
+
       const { data, error } = await supabase.storage
         .from('lab_reports')
         .createSignedUrl(path, SIGNED_URL_EXPIRY, {

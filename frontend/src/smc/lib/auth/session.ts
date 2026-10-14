@@ -17,7 +17,7 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
   return {
     id: "SMC-OFFICER-001",
     email: "official@smc.gov.in",
-    role: "smc_admin",
+    role: "SMC Admin",
     officialId: "SMC-OFF-001",
     name: "Solapur Municipal Health Officer",
     designation: "Chief Health Administrator",

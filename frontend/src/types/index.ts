@@ -246,7 +246,7 @@ export type ComplaintStatus = Complaint['status'];
 export type ComplaintPriority = Complaint['priority'];
 
 // ============ Staff Management ============
-export type StaffType = 'doctor' | 'nurse' | 'technician' | 'pharmacist' | 'admin' | 'support';
+export type StaffType = 'doctor' | 'nurse' | 'technician' | 'pharmacist' | 'admin' | 'support' | 'driver' | 'receptionist' | 'lab_staff' | 'support_staff';
 export type StaffStatus = 'active' | 'on-leave' | 'inactive' | 'suspended';
 
 export interface StaffMember {

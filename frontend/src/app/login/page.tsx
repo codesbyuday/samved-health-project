@@ -143,12 +143,21 @@ function LoginPageContent() {
             </Button>
           </form>
 
+
           <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
             <span>Back to </span>
             <Link href="/" className="font-medium text-primary hover:underline">
               landing page
             </Link>
           </div>
+          
+          <div className="mt-4 pt-4 border-t text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            <span>Want to partner with SMC? </span>
+            <Link href="/register/hospital" className="font-medium text-primary hover:underline">
+              Register your hospital
+            </Link>
+          </div>
+
         </CardContent>
       </Card>
     </div>

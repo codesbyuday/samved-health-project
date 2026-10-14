@@ -58,6 +58,10 @@ class UserProfileSchema(BaseModel):
     official_id: Optional[str] = None
     citizen_id: Optional[str] = None
     ward_number: Optional[int] = None
+    provider_id: Optional[str] = None
+    provider_name: Optional[str] = None
+    provider_role: Optional[str] = None
+    license: Optional[str] = None
 
 
 class LoginResponse(BaseModel):

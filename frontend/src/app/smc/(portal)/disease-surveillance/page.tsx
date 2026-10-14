@@ -3,10 +3,12 @@ import { ChartCard } from "@/smc/components/charts/chart-card";
 import { LineTrendChart } from "@/smc/components/charts/line-trend-chart";
 import { StatusBadge } from "@/smc/components/dashboard/status-badge";
 import { OutbreakAlertSendButton } from "@/smc/components/forms/outbreak-alert-send-button";
+import { SurveillanceScanButton } from "@/smc/components/forms/surveillance-scan-button";
 import { PageHeader } from "@/smc/components/layout/page-header";
 import { TableCard } from "@/smc/components/tables/table-card";
 import { getDiseaseSurveillanceData } from "@/smc/lib/data/queries";
 import { buildSearchParams, formatPercent } from "@/smc/lib/utils";
+import { Sparkles } from "lucide-react";
 
 export default async function DiseaseSurveillancePage({
   searchParams,
@@ -21,6 +23,7 @@ export default async function DiseaseSurveillancePage({
       <PageHeader
         title="Disease Surveillance System"
         description="Monitor anonymized ward-level disease patterns, review early outbreak signals, and manually approve ward-specific alerts before citizens are notified."
+        actions={<SurveillanceScanButton />}
       />
 
       <form className="surface grid gap-4 p-5 md:grid-cols-4">
@@ -151,9 +154,19 @@ export default async function DiseaseSurveillancePage({
                   </div>
                 </div>
 
-                <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                  {signal.explanation}
-                </p>
+                <div className="mt-3 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground/80">Trigger:</span> {signal.explanation}
+                </div>
+
+                <div className="mt-3.5 rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                    <span>AI Epidemiological Assessment</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-foreground/90">
+                    {signal.aiSummary || signal.explanation}
+                  </p>
+                </div>
               </article>
             ))
           ) : (
@@ -199,8 +212,13 @@ export default async function DiseaseSurveillancePage({
           risk: <StatusBadge value={row.riskLevel} mode="risk" />,
           signal: row.earlyOutbreakSignal ? (
             <div>
-              <div className="font-medium text-red-600">EARLY OUTBREAK SIGNAL</div>
-              <div className="text-xs text-muted-foreground">{row.explanation}</div>
+              <div className="flex items-center gap-1 font-semibold text-red-600">
+                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                <span>EARLY OUTBREAK SIGNAL</span>
+              </div>
+              <div className="text-xs text-muted-foreground line-clamp-2" title={row.aiSummary || row.explanation}>
+                {row.aiSummary || row.explanation}
+              </div>
             </div>
           ) : (
             <span className="text-sm text-muted-foreground">Normal observation range</span>
@@ -211,7 +229,7 @@ export default async function DiseaseSurveillancePage({
           page: data.page,
           totalPages: data.totalPages,
           makeHref: (page) =>
-            `/disease-surveillance?${buildSearchParams(resolvedParams, { page })}`,
+            `/smc/disease-surveillance?${buildSearchParams(resolvedParams, { page })}`,
         }}
       />
 

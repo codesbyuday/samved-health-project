@@ -15,28 +15,71 @@ type DiseaseCaseWithJoins = {
   hospitals: { ward_id?: number | null } | null;
 };
 
+export async function GET(request: Request) {
+  return handleOutbreakDetection(request);
+}
+
 export async function POST(request: Request) {
+  return handleOutbreakDetection(request);
+}
+
+async function handleOutbreakDetection(request: Request) {
   const cronSecret = request.headers.get("x-cron-secret");
   const user = await getCurrentUserContext();
 
-  if (cronSecret !== process.env.OUTBREAK_CRON_SECRET && !user) {
+  if (cronSecret !== process.env.OUTBREAK_CRON_SECRET && !user && process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // 1. Try FastAPI centralized surveillance endpoint first
+  const fastApiUrl =
+    process.env.INTERNAL_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "http://localhost:8000";
+
+  try {
+    const backendRes = await fetch(`${fastApiUrl}/api/v1/ai/run-surveillance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+    });
+    if (backendRes.ok) {
+      const data = await backendRes.json();
+      return NextResponse.json({
+        ok: true,
+        count: data.total_signals_evaluated,
+        detected: data.outbreak_signals_detected,
+        highRisk: data.high_risk_count,
+      });
+    }
+  } catch {
+    // Backend unreachable, fallback to direct calculation
+  }
+
   const supabase = await createClient();
-  const weeklyBuckets = Array.from({ length: 6 }, (_, index) =>
-    startOfWeek(subWeeks(new Date(), 5 - index), { weekStartsOn: 1 }),
-  );
-  const now = endOfDay(new Date());
 
   const [{ data: cases }, { data: wards }] = await Promise.all([
     supabase
       .from("disease_cases")
       .select("disease_id, report_date, severity, status, diseases(disease_name), hospitals!inner(ward_id)")
-      .gte("report_date", format(weeklyBuckets[0], "yyyy-MM-dd"))
-      .lte("report_date", format(now, "yyyy-MM-dd")),
+      .order("report_date", { ascending: false })
+      .limit(200),
     supabase.from("wards").select("ward_id, ward_name"),
   ]);
+
+  let anchorDate = new Date();
+  if (cases && cases.length > 0) {
+    const validDates = cases
+      .map((c) => new Date(c.report_date ?? 0).getTime())
+      .filter((t) => !isNaN(t) && t > 0);
+    if (validDates.length > 0) {
+      anchorDate = new Date(Math.max(...validDates));
+    }
+  }
+
+  const weeklyBuckets = Array.from({ length: 6 }, (_, index) =>
+    startOfWeek(subWeeks(anchorDate, 5 - index), { weekStartsOn: 1 }),
+  );
 
   const wardNames = new Map(
     (wards ?? []).map((row) => [row.ward_id, row.ward_name ?? `Ward ${row.ward_id}`]),

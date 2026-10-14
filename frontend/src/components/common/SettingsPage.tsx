@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
+import HospitalDocuments from '@/components/hospital/HospitalDocuments';
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth();
@@ -221,6 +222,10 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mt-8">
+        <HospitalDocuments />
       </div>
     </div>
   );

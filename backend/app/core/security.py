@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Union
+import bcrypt
 import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
@@ -14,13 +15,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     if plain_password == hashed_password:
         return True
     try:
+        if hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
+            return bcrypt.checkpw(plain_password.encode("utf-8")[:72], hashed_password.encode("utf-8"))
         return pwd_context.verify(plain_password, hashed_password)
     except Exception:
         return plain_password == hashed_password
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    # Storing plain text password as requested (no encryption)
+    return password
+
 
 
 def create_access_token(

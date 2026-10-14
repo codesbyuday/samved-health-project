@@ -1,5 +1,6 @@
 from typing import List, Optional
 from app.database.connection import supabase_http_client
+from app.core.logging import logger
 
 
 class HospitalService:
@@ -305,5 +306,429 @@ class HospitalService:
             "activities": activities,
         }
 
+
+    async def register_hospital(self, payload: dict) -> dict:
+        import uuid
+        from fastapi import HTTPException
+        from app.database.connection import supabase_http_client
+        from app.core.security import get_password_hash
+
+        # Check if email is already registered
+        existing_users = await supabase_http_client.select("auth_users", {"email": f"eq.{payload['email']}"})
+        if existing_users:
+            raise HTTPException(status_code=400, detail="This email address is already registered.")
+
+        hospital_id = f"HOS-{uuid.uuid4().hex[:8].upper()}"
+        user_id = str(uuid.uuid4())
+        plain_password = payload["admin_password"]
+
+        # 1. Create Auth User for Hospital Admin (plain text password)
+        user_data = {
+            "id": user_id,
+            "email": payload["email"],
+            "phone": payload["contact_number"],
+            "role": "hospital_staff",
+            "password_hash": plain_password,
+        }
+        await supabase_http_client.insert("auth_users", user_data)
+
+        try:
+            # 2. Create Hospital
+            hospital_data = {
+                "hospital_id": hospital_id,
+                "name": payload["name"],
+                "type": payload["type"],
+                "address": payload["address"],
+                "ward_id": payload.get("ward_id"),
+                "contact_number": payload["contact_number"],
+                "email": payload["email"],
+                "verified_by_smc": False,
+                "status": "pending",
+            }
+            lat = payload.get("latitude")
+            lng = payload.get("longitude")
+            if lat is not None and lng is not None:
+                hospital_data["location"] = f"POINT({lng} {lat})"
+
+            await supabase_http_client.insert("hospitals", hospital_data)
+
+            # 3. Add Admin to HospitalStaff
+            staff_data = {
+                "staff_uuid": str(uuid.uuid4()),
+                "staff_id": f"ADM-{uuid.uuid4().hex[:6].upper()}",
+                "hospital_id": hospital_id,
+                "user_id": user_id,
+                "name": f"{payload['name']} Admin",
+                "role": "admin",
+                "department": "Administration",
+                "phone": payload["contact_number"],
+                "status": "active",
+            }
+            await supabase_http_client.insert("hospital_staff", staff_data)
+
+            return hospital_data
+        except Exception as e:
+            # Clean up user if downstream creation fails
+            await supabase_http_client.delete("auth_users", {"id": f"eq.{user_id}"})
+            raise e
+
+    async def get_pending_registrations(self) -> list:
+        return await supabase_http_client.select('hospitals', {'status': 'eq.pending'})
+
+    async def update_hospital_status(self, hospital_id: str, status: str) -> dict:
+        verified = True if status == 'approved' else False
+        res = await supabase_http_client.update('hospitals', {'hospital_id': f'eq.{hospital_id}'}, {'status': status, 'verified_by_smc': verified})
+        if not res:
+            return None
+        return res[0]
+
+    async def add_document(self, payload: dict) -> dict:
+        import uuid
+        payload['document_id'] = str(uuid.uuid4())
+        await supabase_http_client.insert('hospital_documents', payload)
+        return payload
+
+    async def get_documents(self, hospital_id: str) -> list:
+        docs = await supabase_http_client.select('hospital_documents', {'hospital_id': f'eq.{hospital_id}'})
+        for doc in docs:
+            if 'file_url' in doc and 'hospital_documents' not in doc['file_url']:
+                signed_url = await supabase_http_client.create_signed_url('hospital_document', doc['file_url'])
+                if signed_url:
+                    doc['file_url'] = signed_url
+        return docs
+
+    async def get_hospital_staff(self, hospital_id: str, role: Optional[str] = None, department: Optional[str] = None) -> list:
+        query_params = {'hospital_id': f'eq.{hospital_id}'}
+        if role and role != 'all':
+            query_params['role'] = f'eq.{role.lower()}'
+        if department and department != 'all':
+            query_params['department'] = f'eq.{department}'
+
+        staff_list = await supabase_http_client.select('hospital_staff', query_params)
+        if not staff_list:
+            return []
+
+        # Gather doctor details and auth_user emails
+        doctor_uuids = [s['staff_uuid'] for s in staff_list if s.get('role') == 'doctor']
+        user_ids = [s['user_id'] for s in staff_list if s.get('user_id')]
+
+        doctors_map = {}
+        if doctor_uuids:
+            try:
+                doc_records = await supabase_http_client.select('doctors')
+                for d in doc_records:
+                    if d.get('staff_uuid') in doctor_uuids:
+                        doctors_map[d['staff_uuid']] = d
+            except Exception:
+                pass
+
+        users_map = {}
+        if user_ids:
+            try:
+                u_records = await supabase_http_client.select('auth_users')
+                for u in u_records:
+                    if u.get('id') in user_ids:
+                        users_map[u['id']] = u
+            except Exception:
+                pass
+
+        result = []
+        for s in staff_list:
+            uuid_key = s.get('staff_uuid')
+            uid_key = s.get('user_id')
+            doc_info = doctors_map.get(uuid_key, {})
+            u_info = users_map.get(uid_key, {})
+
+            item = {
+                'staff_uuid': s.get('staff_uuid'),
+                'staff_id': s.get('staff_id'),
+                'hospital_id': s.get('hospital_id'),
+                'user_id': s.get('user_id'),
+                'name': s.get('name') or '',
+                'role': s.get('role') or 'support_staff',
+                'designation': s.get('designation') or s.get('role', '').title(),
+                'department': s.get('department') or 'General',
+                'phone': s.get('phone') or '',
+                'email': u_info.get('email') or '',
+                'address': s.get('address') or '',
+                'shift': s.get('shift') or 'morning',
+                'status': s.get('status') or 'active',
+                'salary': s.get('salary'),
+                'specialization': doc_info.get('specialization'),
+                'qualification': s.get('qualification'),
+                'experience': s.get('experience'),
+                'emergency_contact': s.get('emergency_contact'),
+                'joined_at': s.get('joined_at')
+            }
+            result.append(item)
+
+        return result
+
+    async def create_hospital_staff(self, hospital_id: str, payload: dict) -> dict:
+        import uuid
+        from fastapi import HTTPException
+
+        staff_role = (payload.get('role') or 'support_staff').lower().strip()
+        staff_uuid = str(uuid.uuid4())
+        staff_id = f"STF-{hospital_id[-4:]}-{uuid.uuid4().hex[:4].upper()}"
+        user_id = None
+        credentials = None
+
+        generate_creds = payload.get('generate_credentials', False)
+        non_credential_roles = ['driver', 'support_staff', 'support']
+        if generate_creds:
+            if staff_role in non_credential_roles:
+                raise HTTPException(status_code=400, detail="Cannot generate portal credentials for this role (Driver and operational field staff do not have a dedicated portal dashboard).")
+
+            email = (payload.get('email') or '').strip().lower()
+            if not email:
+                raise HTTPException(status_code=400, detail="Email is required to generate portal login credentials.")
+
+            # Check if email is already registered
+            existing_user = await supabase_http_client.select('auth_users', {'email': f'eq.{email}'})
+            if existing_user:
+                raise HTTPException(status_code=400, detail="A user with this email address already exists.")
+
+            user_id = str(uuid.uuid4())
+            password = payload.get('password') or f"Staff@{uuid.uuid4().hex[:5]}"
+            
+            # Plain text password storage per project requirement
+            user_payload = {
+                'id': user_id,
+                'email': email,
+                'phone': payload.get('phone') or '',
+                'role': 'hospital_staff',
+                'password_hash': password
+            }
+            await supabase_http_client.insert('auth_users', user_payload)
+            credentials = {
+                'email': email,
+                'password': password
+            }
+
+        # Prepare hospital_staff record
+        staff_data = {
+            'staff_uuid': staff_uuid,
+            'staff_id': staff_id,
+            'hospital_id': hospital_id,
+            'user_id': user_id,
+            'name': payload['name'],
+            'role': staff_role,
+            'designation': payload.get('designation') or staff_role.title(),
+            'department': payload.get('department') or 'General',
+            'phone': payload.get('phone') or '',
+            'address': payload.get('address') or '',
+            'shift': payload.get('shift') or 'morning',
+            'status': payload.get('status') or 'active',
+        }
+        if payload.get('salary') is not None:
+            staff_data['salary'] = payload['salary']
+
+        try:
+            await supabase_http_client.insert('hospital_staff', staff_data)
+        except Exception as e:
+            # If user was created, rollback
+            if user_id:
+                await supabase_http_client.delete('auth_users', {'id': f'eq.{user_id}'})
+            # If salary column error, retry without salary
+            if 'salary' in str(e):
+                staff_data.pop('salary', None)
+                await supabase_http_client.insert('hospital_staff', staff_data)
+            else:
+                raise e
+
+        # If role is doctor, insert into doctors table with valid enum
+        if staff_role == 'doctor':
+            norm_spec = self._normalize_doctor_specialization(payload.get('specialization'))
+            doc_data = {
+                'staff_uuid': staff_uuid,
+                'specialization': norm_spec,
+                'consultation_time': payload.get('consultation_time') or 15,
+                'work_start_time': payload.get('work_start_time') or '09:00:00',
+                'work_end_time': payload.get('work_end_time') or '17:00:00',
+                'break_start_time': '13:00:00',
+                'break_end_time': '14:00:00',
+                'max_patients_per_day': payload.get('max_patients_per_day') or 30
+            }
+            try:
+                await supabase_http_client.insert('doctors', doc_data)
+                logger.info(f"Doctor record inserted into doctors table for {staff_uuid} ({norm_spec})")
+            except Exception as e:
+                logger.error(f"Failed to insert doctor record: {e}")
+
+        result = {
+            **staff_data,
+            'specialization': payload.get('specialization'),
+            'qualification': payload.get('qualification'),
+            'experience': payload.get('experience'),
+            'emergency_contact': payload.get('emergency_contact'),
+            'email': payload.get('email'),
+            'credentials': credentials
+        }
+        return result
+
+    @staticmethod
+    def _normalize_doctor_specialization(spec: Optional[str]) -> str:
+        if not spec:
+            return 'general'
+        spec_map = {
+            'general': 'general',
+            'general medicine': 'general',
+            'general physician': 'general',
+            'internal medicine': 'general',
+            'cardiology': 'cardiology',
+            'cardiologist': 'cardiology',
+            'pediatrics': 'pediatrics',
+            'pediatrician': 'pediatrics',
+            'orthopedics': 'orthopedics',
+            'orthopedic': 'orthopedics',
+            'gynecology': 'gynecology',
+            'gynecologist': 'gynecology',
+            'obstetrics & gynecology': 'gynecology',
+            'ob-gyn': 'gynecology',
+            'neurology': 'neurology',
+            'neurologist': 'neurology',
+            'dermatology': 'dermatology',
+            'dermatologist': 'dermatology',
+            'pulmonology': 'pulmonology',
+            'pulmonologist': 'pulmonology',
+            'psychiatry': 'psychiatry',
+            'psychiatrist': 'psychiatry',
+            'endocrinology': 'endocrinology',
+            'endocrinologist': 'endocrinology',
+            'gastroenterology': 'gastroenterology',
+            'gastroenterologist': 'gastroenterology',
+            'ophthalmology': 'ophthalmology',
+            'ophthalmologist': 'ophthalmology',
+        }
+        cleaned = spec.strip().lower()
+        if cleaned in spec_map:
+            return spec_map[cleaned]
+        for k, v in spec_map.items():
+            if k in cleaned or cleaned in k:
+                return v
+        return 'general'
+
+    async def update_hospital_staff(self, hospital_id: str, staff_uuid: str, payload: dict) -> dict:
+        updates = {}
+        for k in ['name', 'role', 'designation', 'department', 'phone', 'address', 'shift', 'status', 'salary']:
+            if k in payload and payload[k] is not None:
+                updates[k] = payload[k]
+
+        if updates:
+            try:
+                await supabase_http_client.update('hospital_staff', {'staff_uuid': f'eq.{staff_uuid}', 'hospital_id': f'eq.{hospital_id}'}, updates)
+            except Exception as e:
+                if 'salary' in str(e):
+                    updates.pop('salary', None)
+                    await supabase_http_client.update('hospital_staff', {'staff_uuid': f'eq.{staff_uuid}', 'hospital_id': f'eq.{hospital_id}'}, updates)
+                else:
+                    raise e
+
+        # Synchronize doctor details if doctor
+        if 'specialization' in payload and payload['specialization']:
+            norm_spec = self._normalize_doctor_specialization(payload['specialization'])
+            try:
+                existing_doc = await supabase_http_client.select('doctors', {'staff_uuid': f'eq.{staff_uuid}'})
+                if existing_doc:
+                    await supabase_http_client.update('doctors', {'staff_uuid': f'eq.{staff_uuid}'}, {'specialization': norm_spec})
+                else:
+                    await supabase_http_client.insert('doctors', {
+                        'staff_uuid': staff_uuid,
+                        'specialization': norm_spec,
+                        'consultation_time': payload.get('consultation_time') or 15,
+                        'work_start_time': payload.get('work_start_time') or '09:00:00',
+                        'work_end_time': payload.get('work_end_time') or '17:00:00',
+                        'break_start_time': '13:00:00',
+                        'break_end_time': '14:00:00',
+                        'max_patients_per_day': payload.get('max_patients_per_day') or 30
+                    })
+            except Exception as e:
+                logger.error(f"Failed to sync doctor record in update: {e}")
+
+        return {'status': 'updated', 'staff_uuid': staff_uuid}
+
+    async def generate_staff_credentials(self, hospital_id: str, staff_uuid: str, payload: dict) -> dict:
+        import uuid
+        from fastapi import HTTPException
+
+        staff_list = await supabase_http_client.select('hospital_staff', {
+            'staff_uuid': f'eq.{staff_uuid}',
+            'hospital_id': f'eq.{hospital_id}'
+        })
+        if not staff_list:
+            raise HTTPException(status_code=404, detail="Staff member not found in your hospital facility.")
+
+        staff = staff_list[0]
+        staff_role = (staff.get('role') or '').lower().strip()
+        non_credential_roles = ['driver', 'support_staff', 'support']
+        if staff_role in non_credential_roles:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot generate portal credentials for '{staff_role.title()}'. Drivers and field operational staff do not have a dedicated clinical portal dashboard."
+            )
+
+        email = (payload.get('email') or '').strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Valid email address is required to generate portal login credentials.")
+
+        password = (payload.get('password') or '').strip()
+        if not password:
+            password = f"Staff@{uuid.uuid4().hex[:5]}"
+
+        existing_user_id = staff.get('user_id')
+        if existing_user_id:
+            user_update = {
+                'email': email,
+                'password_hash': password,
+            }
+            if staff.get('phone'):
+                user_update['phone'] = staff['phone']
+            await supabase_http_client.update('auth_users', {'id': f'eq.{existing_user_id}'}, user_update)
+            user_id = existing_user_id
+        else:
+            user_by_email = await supabase_http_client.select('auth_users', {'email': f'eq.{email}'})
+            if user_by_email:
+                raise HTTPException(status_code=400, detail="An account with this email address already exists. Please choose a different email.")
+
+            user_id = str(uuid.uuid4())
+            user_payload = {
+                'id': user_id,
+                'email': email,
+                'phone': staff.get('phone') or '',
+                'role': 'hospital_staff',
+                'password_hash': password
+            }
+            await supabase_http_client.insert('auth_users', user_payload)
+
+            await supabase_http_client.update('hospital_staff', {
+                'staff_uuid': f'eq.{staff_uuid}',
+                'hospital_id': f'eq.{hospital_id}'
+            }, {'user_id': user_id})
+
+        return {
+            'success': True,
+            'message': f"Portal credentials successfully generated for {staff.get('name')}",
+            'staff_uuid': staff_uuid,
+            'staff_id': staff.get('staff_id'),
+            'name': staff.get('name'),
+            'role': staff.get('role'),
+            'credentials': {
+                'email': email,
+                'password': password
+            }
+        }
+
+    async def delete_hospital_staff(self, hospital_id: str, staff_uuid: str) -> bool:
+        staff = await supabase_http_client.select('hospital_staff', {'staff_uuid': f'eq.{staff_uuid}', 'hospital_id': f'eq.{hospital_id}'})
+        if not staff:
+            return False
+
+        user_id = staff[0].get('user_id')
+        await supabase_http_client.delete('doctors', {'staff_uuid': f'eq.{staff_uuid}'})
+        await supabase_http_client.delete('hospital_staff', {'staff_uuid': f'eq.{staff_uuid}', 'hospital_id': f'eq.{hospital_id}'})
+        if user_id:
+            await supabase_http_client.delete('auth_users', {'id': f'eq.{user_id}'})
+        return True
 
 hospital_service = HospitalService()

@@ -30,6 +30,8 @@ export default function VerifyPage() {
         const { data } = await citizenProfileService.getFullProfile(citizenId);
         if (!data?.citizen) {
           setCitizenExists(false);
+        } else {
+          setCitizenExists(true);
         }
       } catch {
         setCitizenExists(false);

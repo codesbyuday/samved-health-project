@@ -117,4 +117,18 @@ class SupabaseHTTPClient:
             return False
 
 
+
+    async def create_signed_url(self, bucket: str, path: str, expires_in: int = 3600) -> str | None:
+        client = self.get_client()
+        base = self.base_url.replace('/rest/v1', '')
+        url = f"{base}/storage/v1/object/sign/{bucket}/{path}"
+        try:
+            resp = await client.post(url, headers=self.headers, json={"expiresIn": expires_in})
+            if resp.is_success:
+                data = resp.json()
+                return f"{base}/storage/v1{data.get('signedURL')}"
+            return None
+        except Exception as e:
+            return None
+
 supabase_http_client = SupabaseHTTPClient()

@@ -4,7 +4,7 @@ import Topbar from './Topbar';
 
 const Layout = ({ children }) => {
   return (
-    <div className="app-shell flex h-screen">
+    <div className="app-shell flex h-screen bg-slate-100/80 dark:bg-[#071619] text-slate-900 dark:text-slate-100 transition-colors duration-200">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar />

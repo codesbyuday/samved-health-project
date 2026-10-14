@@ -1,12 +1,37 @@
 from fastapi import APIRouter, HTTPException, Query, status
 from typing import List, Optional
 from app.modules.hospitals.schemas import (
-    HospitalSchema, DoctorSchema, BedSchema, EquipmentSchema, AmbulanceSchema
+    HospitalSchema, DoctorSchema, BedSchema, EquipmentSchema, AmbulanceSchema,
+    HospitalRegistrationCreateSchema, HospitalStatusUpdateSchema, HospitalDocumentSchema,
+    HospitalDocumentCreateSchema, StaffCreateSchema, StaffUpdateSchema, StaffResponseSchema,
+    GenerateCredentialsSchema
 )
 from app.modules.hospitals.service import hospital_service
 
 router = APIRouter(prefix="/hospitals", tags=["Hospitals"])
 
+@router.post("/register", response_model=HospitalSchema)
+async def register_hospital(payload: HospitalRegistrationCreateSchema):
+    return await hospital_service.register_hospital(payload.model_dump())
+
+@router.get("/pending", response_model=List[HospitalSchema])
+async def get_pending_hospitals():
+    return await hospital_service.get_pending_registrations()
+
+@router.patch("/{hospital_id}/status", response_model=HospitalSchema)
+async def update_hospital_status(hospital_id: str, payload: HospitalStatusUpdateSchema):
+    res = await hospital_service.update_hospital_status(hospital_id, payload.status)
+    if not res:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    return res
+
+@router.post("/{hospital_id}/documents", response_model=HospitalDocumentSchema)
+async def upload_document(hospital_id: str, document: HospitalDocumentCreateSchema):
+    return await hospital_service.add_document(document.model_dump())
+
+@router.get("/{hospital_id}/documents", response_model=List[HospitalDocumentSchema])
+async def get_documents(hospital_id: str):
+    return await hospital_service.get_documents(hospital_id)
 
 @router.get("", response_model=List[HospitalSchema])
 async def get_hospitals():
@@ -62,3 +87,36 @@ async def get_hospital_dashboard_overview(hospital_id: str):
 @router.get("/{hospital_id}/ambulances", response_model=List[AmbulanceSchema])
 async def get_hospital_ambulances(hospital_id: str):
     return await hospital_service.get_ambulances(hospital_id)
+
+
+@router.get("/{hospital_id}/staff", response_model=List[StaffResponseSchema])
+async def get_hospital_staff(
+    hospital_id: str,
+    role: Optional[str] = Query(None),
+    department: Optional[str] = Query(None)
+):
+    return await hospital_service.get_hospital_staff(hospital_id, role=role, department=department)
+
+
+@router.post("/{hospital_id}/staff", response_model=StaffResponseSchema)
+async def create_hospital_staff(hospital_id: str, payload: StaffCreateSchema):
+    return await hospital_service.create_hospital_staff(hospital_id, payload.model_dump())
+
+
+@router.patch("/{hospital_id}/staff/{staff_uuid}")
+async def update_hospital_staff(hospital_id: str, staff_uuid: str, payload: StaffUpdateSchema):
+    return await hospital_service.update_hospital_staff(hospital_id, staff_uuid, payload.model_dump())
+
+
+@router.post("/{hospital_id}/staff/{staff_uuid}/credentials")
+async def generate_staff_credentials(hospital_id: str, staff_uuid: str, payload: GenerateCredentialsSchema):
+    return await hospital_service.generate_staff_credentials(hospital_id, staff_uuid, payload.model_dump())
+
+
+@router.delete("/{hospital_id}/staff/{staff_uuid}")
+async def delete_hospital_staff(hospital_id: str, staff_uuid: str):
+    res = await hospital_service.delete_hospital_staff(hospital_id, staff_uuid)
+    if not res:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    return {"status": "deleted", "staff_uuid": staff_uuid}
+

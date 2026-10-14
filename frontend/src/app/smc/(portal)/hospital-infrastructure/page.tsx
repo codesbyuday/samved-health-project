@@ -3,6 +3,8 @@ import { PageHeader } from "@/smc/components/layout/page-header";
 import { TableCard } from "@/smc/components/tables/table-card";
 import { getHospitalOverviewRows } from "@/smc/lib/data/queries";
 import { formatDate, formatNumber } from "@/smc/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RegistrationRequestsTab } from "@/smc/components/hospital/registration-requests-tab";
 
 export default async function HospitalInfrastructurePage() {
   const rows = await getHospitalOverviewRows();
@@ -14,32 +16,45 @@ export default async function HospitalInfrastructurePage() {
         description="Bed capacity, equipment coverage, doctor distribution, and medicine stock risk by hospital."
       />
 
-      <TableCard
-        title="Infrastructure Overview"
-        columns={[
-          { key: "hospital", label: "Hospital" },
-          { key: "ward", label: "Ward" },
-          { key: "beds", label: "Beds" },
-          { key: "occupied", label: "Occupied" },
-          { key: "doctors", label: "Doctors" },
-          { key: "equipment", label: "Equipment" },
-          { key: "stock", label: "Medicine Alerts" },
-          { key: "updated", label: "Last Update" },
-          { key: "status", label: "Verification" },
-        ]}
-        rows={rows.map((row) => ({
-          id: row.hospitalId,
-          hospital: row.name,
-          ward: row.wardName,
-          beds: formatNumber(row.totalBeds),
-          occupied: formatNumber(row.occupiedBeds),
-          doctors: formatNumber(row.doctors),
-          equipment: formatNumber(row.equipment),
-          stock: formatNumber(row.lowStockMedicines),
-          updated: formatDate(row.lastUpdatedAt, "dd MMM yyyy, p"),
-          status: <StatusBadge value={row.verified} />,
-        }))}
-      />
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Infrastructure Overview</TabsTrigger>
+          <TabsTrigger value="requests">Registration Requests</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview" className="space-y-6">
+          <TableCard
+            title="Infrastructure Overview"
+            columns={[
+              { key: "hospital", label: "Hospital" },
+              { key: "ward", label: "Ward" },
+              { key: "beds", label: "Beds" },
+              { key: "occupied", label: "Occupied" },
+              { key: "doctors", label: "Doctors" },
+              { key: "equipment", label: "Equipment" },
+              { key: "stock", label: "Medicine Alerts" },
+              { key: "updated", label: "Last Update" },
+              { key: "status", label: "Verification" },
+            ]}
+            rows={rows.map((row) => ({
+              id: row.hospitalId,
+              hospital: row.name,
+              ward: row.wardName,
+              beds: formatNumber(row.totalBeds),
+              occupied: formatNumber(row.occupiedBeds),
+              doctors: formatNumber(row.doctors),
+              equipment: formatNumber(row.equipment),
+              stock: formatNumber(row.lowStockMedicines),
+              updated: formatDate(row.lastUpdatedAt, "dd MMM yyyy, p"),
+              status: <StatusBadge value={row.verified} />,
+            }))}
+          />
+        </TabsContent>
+        
+        <TabsContent value="requests">
+          <RegistrationRequestsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

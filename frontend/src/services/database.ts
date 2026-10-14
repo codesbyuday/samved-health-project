@@ -1,4 +1,5 @@
 import { apiClient } from '@/services/apiClient';
+import { supabase } from '@/lib/supabase';
 import { USER_SESSION_KEY, type UserProfile } from '@/lib/auth';
 
 // =====================
@@ -247,6 +248,31 @@ export interface Ward {
   zone: string | null;
   population: number | null;
   population_density: number | null;
+}
+
+export interface VaccinationRecord {
+  record_id: string;
+  citizen_id: string | null;
+  hospital_id: string | null;
+  campaign_id: string | null;
+  vaccine_type: string | null;
+  dose_number: number | null;
+  date_administered: string | null;
+  hospital?: Hospital | null;
+}
+
+export interface HealthRecord {
+  record_id: string;
+  citizen_id: string | null;
+  hospital_id: string | null;
+  staff_id: string | null;
+  diagnosis: string | null;
+  prescription: string | null;
+  notes: string | null;
+  visit_date: string | null;
+  hospital?: Hospital | null;
+  staff?: HospitalStaff | null;
+  doctor?: HospitalStaff | null;
 }
 
 export const DEPARTMENTS = [
@@ -666,9 +692,27 @@ export const vaccinationRecordService = {
   async getAll(): Promise<{ data: any[] | null; error: string | null }> {
     return apiClient.get<any[]>('/smc/campaigns');
   },
-  async getByCitizen(citizenId: string): Promise<{ data: any[] | null; error: string | null }> {
-    const res = await apiClient.get<any[]>('/smc/campaigns');
-    return { data: res.data || [], error: res.error };
+  async getByCitizen(citizenId: string): Promise<{ data: VaccinationRecord[] | null; error: string | null }> {
+    try {
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('vaccination_records')
+          .select('*, hospitals(*)')
+          .eq('citizen_id', citizenId)
+          .order('date_administered', { ascending: false });
+        if (!error && data) {
+          const records = data.map((r: any) => ({
+            ...r,
+            hospital: r.hospitals as Hospital,
+          })) as VaccinationRecord[];
+          return { data: records, error: null };
+        }
+      }
+      const res = await apiClient.get<any[]>(`/citizens/${citizenId}/vaccinations`);
+      return { data: res.data || [], error: res.error };
+    } catch (err: any) {
+      return { data: null, error: parseErrorMessage(err) };
+    }
   }
 };
 
@@ -676,13 +720,298 @@ export const healthRecordService = {
   async getAll(): Promise<{ data: any[] | null; error: string | null }> {
     return apiClient.get<any[]>('/laboratories/reports');
   },
-  async getByCitizen(citizenId: string): Promise<{ data: any[] | null; error: string | null }> {
-    return apiClient.get<any[]>('/laboratories/reports', { citizen_id: citizenId });
+  async getByCitizen(citizenId: string): Promise<{ data: HealthRecord[] | null; error: string | null }> {
+    try {
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('health_records')
+          .select('*, hospitals(*), hospital_staff(*)')
+          .eq('citizen_id', citizenId)
+          .order('visit_date', { ascending: false });
+        if (!error && data) {
+          const records = data.map((h: any) => ({
+            ...h,
+            hospital: h.hospitals as Hospital,
+            staff: h.hospital_staff as HospitalStaff,
+            doctor: h.hospital_staff as HospitalStaff,
+          })) as HealthRecord[];
+          return { data: records, error: null };
+        }
+      }
+      const res = await apiClient.get<any[]>(`/citizens/${citizenId}/health-records`);
+      return { data: res.data || [], error: res.error };
+    } catch (err: any) {
+      return { data: null, error: parseErrorMessage(err) };
+    }
   }
 };
 
-export const appointmentServiceExt = appointmentService;
-export const citizenProfileService = citizenService;
+export const appointmentServiceExt = {
+  ...appointmentService,
+  async getByCitizen(citizenId: string): Promise<{ data: Appointment[] | null; error: string | null }> {
+    try {
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('appointments')
+          .select('*, hospitals(*), doctors(*, hospital_staff(*))')
+          .eq('citizen_id', citizenId)
+          .order('appointment_date', { ascending: false });
+        if (!error && data) {
+          const appointments = data.map((a: any) => ({
+            ...a,
+            citizen: a.citizens as Citizen,
+            hospital: a.hospitals as Hospital,
+            doctor: a.doctors
+              ? ({
+                  ...(a.doctors.hospital_staff || {}),
+                  specialization: a.doctors.specialization,
+                  consultation_time: a.doctors.consultation_time,
+                  work_start_time: a.doctors.work_start_time,
+                  work_end_time: a.doctors.work_end_time,
+                  break_start_time: a.doctors.break_start_time,
+                  break_end_time: a.doctors.break_end_time,
+                  max_patients_per_day: a.doctors.max_patients_per_day,
+                } as Doctor)
+              : null,
+          })) as Appointment[];
+          return { data: appointments, error: null };
+        }
+      }
+      return apiClient.get<Appointment[]>('/appointments', { citizen_id: citizenId });
+    } catch (err: any) {
+      return { data: null, error: parseErrorMessage(err) };
+    }
+  }
+};
+
+export const citizenProfileService = {
+  ...citizenService,
+
+  async getFullProfile(citizenId: string): Promise<{
+    data: {
+      citizen: Citizen | null;
+      appointments: Appointment[];
+      labReports: DiagnosticReport[];
+      vaccinationRecords: VaccinationRecord[];
+      healthRecords: HealthRecord[];
+    } | null;
+    error: string | null;
+  }> {
+    try {
+      if (!citizenId) {
+        return { data: null, error: 'Citizen ID is required' };
+      }
+
+      // 1. Fetch citizen details (try Supabase first, fallback to FastAPI)
+      let citizen: Citizen | null = null;
+      if (supabase) {
+        const { data } = await supabase
+          .from('citizens')
+          .select('*')
+          .eq('citizen_id', citizenId)
+          .maybeSingle();
+        if (data) citizen = data as Citizen;
+      }
+
+      if (!citizen) {
+        const res = await apiClient.get<Citizen>(`/citizens/${citizenId}`);
+        if (res.data) citizen = res.data;
+      }
+
+      if (!citizen) {
+        return { data: null, error: `Citizen ID "${citizenId}" does not exist in our records.` };
+      }
+
+      // 2. Fetch all collections in parallel from Supabase
+      let appointments: Appointment[] = [];
+      let labReports: DiagnosticReport[] = [];
+      let vaccinationRecords: VaccinationRecord[] = [];
+      let healthRecords: HealthRecord[] = [];
+
+      if (supabase) {
+        const [apptRes, labRes, vacRes, healthRes] = await Promise.allSettled([
+          supabase
+            .from('appointments')
+            .select('*, hospitals(*), doctors(*, hospital_staff(*))')
+            .eq('citizen_id', citizenId)
+            .order('appointment_date', { ascending: false }),
+          supabase
+            .from('diagnostic_reports')
+            .select('*, hospitals(*), test_types(*)')
+            .eq('citizen_id', citizenId)
+            .order('test_date', { ascending: false }),
+          supabase
+            .from('vaccination_records')
+            .select('*, hospitals(*)')
+            .eq('citizen_id', citizenId)
+            .order('date_administered', { ascending: false }),
+          supabase
+            .from('health_records')
+            .select('*, hospitals(*), hospital_staff(*)')
+            .eq('citizen_id', citizenId)
+            .order('visit_date', { ascending: false }),
+        ]);
+
+        if (apptRes.status === 'fulfilled' && apptRes.value.data) {
+          appointments = (apptRes.value.data as any[]).map((a) => ({
+            ...a,
+            citizen: citizen as Citizen,
+            hospital: a.hospitals as Hospital,
+            doctor: a.doctors
+              ? ({
+                  ...(a.doctors.hospital_staff || {}),
+                  specialization: a.doctors.specialization,
+                  consultation_time: a.doctors.consultation_time,
+                  work_start_time: a.doctors.work_start_time,
+                  work_end_time: a.doctors.work_end_time,
+                  break_start_time: a.doctors.break_start_time,
+                  break_end_time: a.doctors.break_end_time,
+                  max_patients_per_day: a.doctors.max_patients_per_day,
+                } as Doctor)
+              : null,
+          }));
+        }
+
+        if (labRes.status === 'fulfilled' && labRes.value.data) {
+          labReports = (labRes.value.data as any[]).map((r) => ({
+            ...r,
+            citizen: citizen as Citizen,
+            hospital: r.hospitals as Hospital,
+            test_type: r.test_types as TestType,
+          }));
+        }
+
+        if (vacRes.status === 'fulfilled' && vacRes.value.data) {
+          vaccinationRecords = (vacRes.value.data as any[]).map((v) => ({
+            ...v,
+            hospital: v.hospitals as Hospital,
+          }));
+        }
+
+        if (healthRes.status === 'fulfilled' && healthRes.value.data) {
+          healthRecords = (healthRes.value.data as any[]).map((h) => ({
+            ...h,
+            hospital: h.hospitals as Hospital,
+            staff: h.hospital_staff as HospitalStaff,
+            doctor: h.hospital_staff as HospitalStaff,
+          }));
+        }
+      }
+
+      // 3. Fallback to FastAPI endpoints if needed
+      if (healthRecords.length === 0) {
+        try {
+          const hrRes = await apiClient.get<any[]>(`/citizens/${citizenId}/health-records`);
+          if (hrRes.data && hrRes.data.length > 0) {
+            healthRecords = hrRes.data;
+          }
+        } catch {}
+      }
+
+      if (vaccinationRecords.length === 0) {
+        try {
+          const vrRes = await apiClient.get<any[]>(`/citizens/${citizenId}/vaccinations`);
+          if (vrRes.data && vrRes.data.length > 0) {
+            vaccinationRecords = vrRes.data;
+          }
+        } catch {}
+      }
+
+      return {
+        data: {
+          citizen,
+          appointments,
+          labReports,
+          vaccinationRecords,
+          healthRecords,
+        },
+        error: null,
+      };
+    } catch (error) {
+      console.error('Error in citizenProfileService.getFullProfile:', error);
+      return { data: null, error: parseErrorMessage(error) };
+    }
+  },
+
+  async verifyCitizen(
+    citizenId: string,
+    credential: { type: 'phone' | 'aadhar'; value: string }
+  ): Promise<{ success: boolean; error: string | null }> {
+    try {
+      if (!citizenId) {
+        return { success: false, error: 'Citizen ID is required' };
+      }
+
+      let citizen: Citizen | null = null;
+      if (supabase) {
+        const { data } = await supabase
+          .from('citizens')
+          .select('*')
+          .eq('citizen_id', citizenId)
+          .maybeSingle();
+        if (data) citizen = data as Citizen;
+      }
+
+      if (!citizen) {
+        const res = await apiClient.get<Citizen>(`/citizens/${citizenId}`);
+        if (res.data) citizen = res.data;
+      }
+
+      if (!citizen) {
+        return { success: false, error: 'Citizen not found in our records.' };
+      }
+
+      const cleanInput = (credential.value || '').replace(/\D/g, '').trim();
+
+      if (credential.type === 'phone') {
+        const citizenPhone = (citizen.phone || '').replace(/\D/g, '').trim();
+        if (!citizenPhone) {
+          return {
+            success: false,
+            error: 'No mobile number registered with this Citizen ID. Please contact your registered hospital.',
+          };
+        }
+
+        // Compare exact, or 10-digit suffix (handles +91 or leading 0)
+        if (
+          citizenPhone === cleanInput ||
+          citizenPhone.endsWith(cleanInput) ||
+          cleanInput.endsWith(citizenPhone)
+        ) {
+          return { success: true, error: null };
+        }
+
+        return {
+          success: false,
+          error: 'The mobile number entered does not match our records for this citizen. Please check and try again.',
+        };
+      } else if (credential.type === 'aadhar') {
+        const citizenAadhar = (citizen.aadhar_id || '').replace(/\D/g, '').trim();
+        if (!citizenAadhar) {
+          return {
+            success: false,
+            error: 'No Aadhar ID is registered for this citizen. Please verify using your registered mobile number instead.',
+          };
+        }
+
+        if (citizenAadhar === cleanInput) {
+          return { success: true, error: null };
+        }
+
+        return {
+          success: false,
+          error: 'The Aadhar ID entered does not match our records for this citizen. Please check and try again.',
+        };
+      }
+
+      return { success: false, error: 'Invalid verification method.' };
+    } catch (error) {
+      console.error('Error verifying citizen:', error);
+      return { success: false, error: parseErrorMessage(error) };
+    }
+  },
+};
+
 export const hospitalSearchService = hospitalService;
 export const doctorSearchService = doctorService;
 export const diseaseSearchService = diseaseService;

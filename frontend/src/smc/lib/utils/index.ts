@@ -68,7 +68,9 @@ export function getStatusTone(value: string | boolean | null | undefined) {
     normalized.includes("verified") ||
     normalized.includes("active") ||
     normalized.includes("healthy") ||
-    normalized.includes("complete")
+    normalized.includes("complete") ||
+    normalized.includes("sent") ||
+    normalized.includes("approved")
   ) {
     return "text-green-700 bg-green-50 border-green-200 dark:text-green-200 dark:bg-green-950/40 dark:border-green-900";
   }

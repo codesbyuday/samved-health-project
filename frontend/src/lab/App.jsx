@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SearchProvider } from './SearchContext';
 import { AppDataProvider, useAppData } from './context/AppDataContext';
@@ -20,40 +20,50 @@ import Settings from './pages/Settings';
 import './index.css';
 
 const AppShell = () => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAuth, setIsAuth] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('samved-session') === 'signed-in';
+      const session = localStorage.getItem('lab-dashboard-session');
+      return !!session && localStorage.getItem('samved-session') === 'signed-in';
     }
     return false;
   });
-  const { currentProvider, loading } = useAppData();
-  const shellClassName = useMemo(() => 'app-shell', []);
+  const { currentProvider, loading, refreshData } = useAppData();
 
   if (!isAuth) {
-    return <Login onLogin={() => {
-      localStorage.setItem('samved-session', 'signed-in');
-      setIsAuth(true);
-    }} />;
+    return (
+      <Login
+        onLogin={() => {
+          setIsAuth(true);
+          if (refreshData) refreshData();
+        }}
+      />
+    );
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem('samved-session');
+    localStorage.removeItem('lab-dashboard-session');
+    localStorage.removeItem('samved-provider-id');
+    setIsAuth(false);
+  };
+
   return (
-    <div className={shellClassName}>
-      <Sidebar />
-      <div className="content-shell">
+    <div className="app-shell flex h-screen bg-[#f3f7f8] dark:bg-[#071619] text-slate-900 dark:text-slate-100 transition-colors duration-200">
+      <Sidebar mobileOpen={mobileMenuOpen} onCloseMobile={() => setMobileMenuOpen(false)} />
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <Navbar
           provider={currentProvider}
-          onLogout={() => {
-            localStorage.setItem('samved-session', 'signed-out');
-            setIsAuth(false);
-          }}
+          onLogout={handleLogout}
+          onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
         />
-        <main className="content-main">
-          <div className="content-inner">
+        <main className="app-scroll flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8">
+          <div className="max-w-7xl mx-auto">
             {loading ? (
-              <div className="panel hero-panel">
-                <p className="eyebrow">Syncing Workspace</p>
-                <h1 className="section-title">Connecting to SAMVED health data</h1>
-                <p className="section-copy">Loading provider profile, appointments, reports, catalog, alerts, and surveillance metrics.</p>
+              <div className="surface-card rounded-3xl p-12 text-center space-y-3">
+                <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent mx-auto"></div>
+                <h2 className="text-lg font-bold text-main">Syncing Laboratory Workspace</h2>
+                <p className="text-sm text-soft">Connecting to municipal database for live test bookings, investigations, and reports...</p>
               </div>
             ) : (
               <Routes>

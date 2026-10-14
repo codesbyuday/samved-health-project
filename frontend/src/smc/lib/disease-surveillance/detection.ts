@@ -29,6 +29,7 @@ export type SurveillanceDetectionResult = {
   alertMessage: string;
   citizenPreview: string;
   explanation: string;
+  aiSummary?: string;
 };
 
 function round(value: number, digits = 1) {
