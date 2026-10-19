@@ -93,10 +93,13 @@ export default function CitizenServices() {
   const moduleAccess = getModuleAccess('citizen-services');
   const canManageCitizens = moduleAccess === 'full';
   const [searchQuery, setSearchQuery] = useState('');
+  const [idType, setIdType] = useState<'health_id' | 'aadhar_id' | 'phone'>('health_id');
   const [citizens, setCitizens] = useState<Citizen[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
   const [selectedCitizen, setSelectedCitizen] = useState<Citizen | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -146,24 +149,36 @@ export default function CitizenServices() {
   };
 
   const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return;
+    const clean = searchQuery.trim();
+    if (!clean) {
+      toast.warning('Please enter an ID or phone number to search');
+      return;
+    }
     setIsSearching(true);
-    const { data, error } = await citizenService.search(searchQuery.trim());
-    setIsSearching(false);
-    if (error) toast.error(error);
-    else setCitizens(data || []);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery.trim()) {
-        void handleSearch();
-      } else {
+    setSearchError(null);
+    setHasSearched(true);
+    try {
+      const { data, error } = await citizenService.searchByIdType(idType, clean);
+      if (error) {
+        toast.error(error);
+        setSearchError(error);
         setCitizens([]);
+      } else {
+        const results = data || [];
+        setCitizens(results);
+        if (results.length === 0) {
+          setSearchError('Citizen not found in system');
+        }
       }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [handleSearch, searchQuery]);
+    } catch (err: any) {
+      console.error('Citizen search error:', err);
+      toast.error('Search failed');
+      setSearchError('Search failed');
+      setCitizens([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [idType, searchQuery]);
 
   // Handle photo selection
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -705,21 +720,85 @@ export default function CitizenServices() {
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col items-center gap-4">
-            <div className="w-full max-w-2xl">
-              <Label className="mb-2 block">Search by Name, Citizen ID, Phone, or Aadhar ID</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                <Input
-                  placeholder="Enter name, Citizen ID (SMC-YYYY-XXXXXX), phone, or Aadhar..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-12"
-                />
-                {isSearching && <Loader2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-slate-400" />}
+            <div className="w-full max-w-2xl space-y-2">
+              <Label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Search Citizen Information
+              </Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                {/* ID Type Select */}
+                <Select
+                  value={idType}
+                  onValueChange={(val: 'health_id' | 'aadhar_id' | 'phone') => {
+                    setIdType(val);
+                    setSearchError(null);
+                    setHasSearched(false);
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-[170px] shrink-0 bg-slate-50 dark:bg-slate-800">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="health_id">Health ID (SMC)</SelectItem>
+                    <SelectItem value="aadhar_id">Aadhaar ID</SelectItem>
+                    <SelectItem value="phone">Phone Number</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Search Text Input */}
+                <div className="relative flex-1">
+                  <Input
+                    placeholder={
+                      idType === 'health_id'
+                        ? 'e.g., SMC-2025-000001 or SMC-2026-000132'
+                        : idType === 'aadhar_id'
+                        ? 'e.g., 900000000001 (12 digits)'
+                        : 'e.g., 9876543210 (10 digits)'
+                    }
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (searchError) setSearchError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleSearch();
+                      }
+                    }}
+                    className="h-10 bg-white dark:bg-slate-900"
+                  />
+                </div>
+
+                {/* Search Button */}
+                <Button
+                  onClick={() => void handleSearch()}
+                  disabled={isSearching || !searchQuery.trim()}
+                  className="gap-2 shrink-0 min-w-[105px] bg-[#047857] hover:bg-[#065F46] text-white"
+                >
+                  {isSearching ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4" />
+                      Search
+                    </>
+                  )}
+                </Button>
               </div>
+
+              <p className="text-xs text-slate-500">
+                {idType === 'health_id'
+                  ? "Enter citizen Health Card ID and click Search"
+                  : idType === 'aadhar_id'
+                  ? "Enter citizen 12-digit Aadhaar number and click Search"
+                  : "Enter registered 10-digit mobile number and click Search"}
+              </p>
             </div>
 
-            {searchQuery && citizens.length > 0 && (
+            {hasSearched && citizens.length > 0 && (
               <div className="w-full max-w-5xl mt-4">
                 <p className="text-sm text-slate-500 mb-2">Found {citizens.length} citizen(s)</p>
                 <div className="border rounded-lg overflow-x-auto">
@@ -759,7 +838,6 @@ export default function CitizenServices() {
                             </div>
                           </TableCell>
                           <TableCell>{(() => {
-                            // Calculate age dynamically from date_of_birth
                             if (c.date_of_birth) {
                               const calculatedAge = Math.floor((new Date().getTime() - new Date(c.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
                               return `${calculatedAge} / ${c.gender?.charAt(0) || '?'}`;
@@ -795,10 +873,15 @@ export default function CitizenServices() {
               </div>
             )}
 
-            {searchQuery && !isSearching && citizens.length === 0 && (
-              <div className="text-center py-8">
-                <AlertCircle className="h-12 w-12 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500">No citizens found matching your search.</p>
+            {hasSearched && !isSearching && citizens.length === 0 && (
+              <div className="w-full max-w-2xl mt-4 text-center py-8 p-6 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
+                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-2" />
+                <p className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                  Citizen not found in system
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  No matching record for {idType === 'health_id' ? 'Health ID' : idType === 'aadhar_id' ? 'Aadhaar ID' : 'Phone'} &quot;{searchQuery}&quot;. Please verify the details or register a new citizen.
+                </p>
               </div>
             )}
           </div>

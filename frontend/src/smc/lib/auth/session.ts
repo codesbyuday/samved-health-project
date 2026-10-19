@@ -1,9 +1,6 @@
 import { redirect } from "next/navigation";
-
-import { normalizeRole, canAccess } from "@/smc/lib/auth/roles";
-import { createClient } from "@/smc/lib/supabase/server";
+import { canAccess } from "@/smc/lib/auth/roles";
 import type { UserContext } from "@/smc/lib/types/schema";
-
 import { cookies } from "next/headers";
 
 export async function getCurrentUserContext(): Promise<UserContext | null> {
@@ -14,13 +11,14 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     return null;
   }
 
+  // Mapped to official SMC-OFF-001 from smc_officials table with valid user_id UUID
   return {
-    id: "SMC-OFFICER-001",
+    id: "c3000001-0000-0000-0000-000000000001",
     email: "official@smc.gov.in",
     role: "SMC Admin",
     officialId: "SMC-OFF-001",
-    name: "Solapur Municipal Health Officer",
-    designation: "Chief Health Administrator",
+    name: "Rajendra Kulkarni",
+    designation: "Municipal Commissioner",
   };
 }
 
@@ -37,4 +35,3 @@ export async function requireUserContext(pathname?: string) {
 
   return context;
 }
-

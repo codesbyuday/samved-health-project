@@ -12,13 +12,21 @@ export async function POST(
   const body = await request.json();
   const supabase = await createClient();
 
+  const updatePayload: Record<string, any> = {
+    remarks_by_officers: body.remarks ?? null,
+  };
+  if (body.status) {
+    updatePayload.status = body.status;
+  } else {
+    updatePayload.status = "resolved";
+  }
+  if (updatePayload.status === "resolved") {
+    updatePayload.resolved_at = new Date().toISOString();
+  }
+
   const { error } = await supabase
     .from("complaints")
-    .update({
-      status: "resolved",
-      remarks_by_officers: body.remarks ?? null,
-      resolved_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("complaint_id", id);
 
   if (error) {

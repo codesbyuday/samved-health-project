@@ -57,13 +57,13 @@ const getActivityBadge = (type: string) => {
   }
 };
 
-export default function RecentActivityFeed() {
+export default function RecentActivityFeed({ hospitalId }: { hospitalId?: string } = {}) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadActivities() {
     setLoading(true);
-    const { data } = await dashboardService.getRecentActivities();
+    const { data } = await dashboardService.getRecentActivities(hospitalId);
     if (data) {
       setActivities(data);
     }
@@ -76,7 +76,7 @@ export default function RecentActivityFeed() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [hospitalId]);
 
   if (loading) {
     return (

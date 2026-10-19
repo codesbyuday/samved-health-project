@@ -44,7 +44,7 @@ interface DashboardStats {
 }
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
-  const { canAccessModule } = useRBAC();
+  const { canAccessModule, hospitalId } = useRBAC();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
@@ -54,7 +54,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: statsError } = await dashboardService.getStatsWithTrends();
+      const { data, error: statsError } = await dashboardService.getStatsWithTrends(hospitalId || undefined);
       
       if (statsError) {
         setError(statsError);
@@ -82,7 +82,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [hospitalId]);
 
   if (isLoading) {
     return (
@@ -243,18 +243,18 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <PatientVisitsChart />
-        <DiseaseTrendsChart />
+        <PatientVisitsChart hospitalId={hospitalId || undefined} />
+        <DiseaseTrendsChart hospitalId={hospitalId || undefined} />
       </div>
 
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <BedOccupancyChart />
-        <NotificationsPanel className="lg:col-span-2" />
+        <BedOccupancyChart hospitalId={hospitalId || undefined} />
+        <NotificationsPanel className="lg:col-span-2" hospitalId={hospitalId || undefined} />
       </div>
 
       {/* Recent Activity Feed */}
-      <RecentActivityFeed />
+      <RecentActivityFeed hospitalId={hospitalId || undefined} />
     </div>
   );
 }

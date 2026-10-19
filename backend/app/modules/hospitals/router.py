@@ -6,6 +6,7 @@ from app.modules.hospitals.schemas import (
     HospitalDocumentCreateSchema, StaffCreateSchema, StaffUpdateSchema, StaffResponseSchema,
     GenerateCredentialsSchema
 )
+from app.database.connection import supabase_http_client
 from app.modules.hospitals.service import hospital_service
 
 router = APIRouter(prefix="/hospitals", tags=["Hospitals"])
@@ -26,11 +27,82 @@ async def update_hospital_status(hospital_id: str, payload: HospitalStatusUpdate
     return res
 
 @router.post("/{hospital_id}/documents", response_model=HospitalDocumentSchema)
-async def upload_document(hospital_id: str, document: HospitalDocumentCreateSchema):
+async def upload_document(
+    hospital_id: str,
+    document: HospitalDocumentCreateSchema,
+    staff_id: Optional[str] = Query(None),
+    role: Optional[str] = Query(None)
+):
+    if role:
+        normalized = role.strip().lower()
+        if normalized not in ["admin", "hospital_admin", "hospital_administrator", "smc_admin"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Only hospital administrators can upload hospital documents."
+            )
+    if staff_id:
+        staff_rows = await supabase_http_client.select("hospital_staff", {"staff_id": f"eq.{staff_id}"})
+        if staff_rows:
+            staff = staff_rows[0]
+            if staff.get("hospital_id") != hospital_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Staff does not belong to this hospital facility."
+                )
+            s_role = (staff.get("role") or "").strip().lower()
+            s_desig = (staff.get("designation") or "").strip().lower()
+            if s_role not in ["admin", "hospital_admin"] and "admin" not in s_desig:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Only hospital administrators can upload hospital documents."
+                )
     return await hospital_service.add_document(document.model_dump())
 
 @router.get("/{hospital_id}/documents", response_model=List[HospitalDocumentSchema])
-async def get_documents(hospital_id: str):
+async def get_documents(
+    hospital_id: str,
+    staff_id: Optional[str] = Query(None),
+    role: Optional[str] = Query(None)
+):
+    if role:
+        normalized = role.strip().lower()
+        smc_roles = [
+            "admin",
+            "hospital_admin",
+            "hospital_administrator",
+            "smc_admin",
+            "smc admin",
+            "smc_officer",
+            "officer",
+            "commissioner",
+            "health_officer",
+            "ward_supervisor",
+        ]
+        if normalized not in smc_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Only hospital administrators and authorized SMC officials can view hospital documents."
+            )
+        # If it's an authorized SMC official, allow viewing documents for any hospital
+        if normalized in ["smc_admin", "smc admin", "smc_officer", "officer", "commissioner", "health_officer", "ward_supervisor"]:
+            return await hospital_service.get_documents(hospital_id)
+
+    if staff_id:
+        staff_rows = await supabase_http_client.select("hospital_staff", {"staff_id": f"eq.{staff_id}"})
+        if staff_rows:
+            staff = staff_rows[0]
+            if staff.get("hospital_id") != hospital_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Staff does not belong to this hospital facility."
+                )
+            s_role = (staff.get("role") or "").strip().lower()
+            s_desig = (staff.get("designation") or "").strip().lower()
+            if s_role not in ["admin", "hospital_admin"] and "admin" not in s_desig:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Only hospital administrators can view hospital documents."
+                )
     return await hospital_service.get_documents(hospital_id)
 
 @router.get("", response_model=List[HospitalSchema])

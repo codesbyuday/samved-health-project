@@ -15,8 +15,13 @@ async def get_public_analytics():
 async def get_disease_cases(
     ward_number: Optional[int] = Query(None),
     hospital_id: Optional[str] = Query(None),
+    citizen_id: Optional[str] = Query(None),
 ):
-    return await disease_surveillance_service.get_cases(ward_number=ward_number, hospital_id=hospital_id)
+    return await disease_surveillance_service.get_cases(
+        ward_number=ward_number,
+        hospital_id=hospital_id,
+        citizen_id=citizen_id,
+    )
 
 
 @router.post("/cases", response_model=DiseaseCaseSchema, status_code=status.HTTP_201_CREATED)

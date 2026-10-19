@@ -37,8 +37,6 @@ class PharmacyService:
         stock_raw, meds_raw = await asyncio.gather(stock_task, meds_task, return_exceptions=True)
 
         stock_rows = stock_raw if isinstance(stock_raw, list) else []
-        if not stock_rows and not provider_id and hospital_id:
-            stock_rows = await supabase_http_client.select("hospital_medicine_stock", {"order": "last_updated.desc"})
 
         medicines = meds_raw if isinstance(meds_raw, list) else []
         med_map = {m["medicine_id"]: m for m in medicines if isinstance(m, dict) and "medicine_id" in m}
@@ -106,6 +104,7 @@ class PharmacyService:
 
     async def delete_stock(self, stock_id: str) -> bool:
         await supabase_http_client.delete("pharmacy_medicine_stock", {"stock_id": f"eq.{stock_id}"})
+        await supabase_http_client.delete("hospital_medicine_stock", {"stock_id": f"eq.{stock_id}"})
         return True
 
 

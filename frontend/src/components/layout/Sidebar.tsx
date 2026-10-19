@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { useRBAC } from '@/hooks/use-rbac';
+import { useAuth } from '@/contexts/AuthContext';
+import { badgeService, type SidebarBadgeCounts, getCurrentHospitalId } from '@/services/database';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -51,7 +53,6 @@ interface NavItem {
   id: PageType;
   label: string;
   icon: React.ReactNode;
-  badge?: number;
 }
 
 const navItems: NavItem[] = [
@@ -64,7 +65,6 @@ const navItems: NavItem[] = [
     id: 'appointments',
     label: 'Appointments',
     icon: <CalendarDays className="h-5 w-5" />,
-    badge: 5,
   },
   {
     id: 'citizen-services',
@@ -80,7 +80,6 @@ const navItems: NavItem[] = [
     id: 'lab-reports',
     label: 'Lab Reports',
     icon: <FileText className="h-5 w-5" />,
-    badge: 2,
   },
   {
     id: 'bed-management',
@@ -96,7 +95,6 @@ const navItems: NavItem[] = [
     id: 'disease-reporting',
     label: 'Disease Analytics',
     icon: <Activity className="h-5 w-5" />,
-    badge: 3,
   },
   {
     id: 'referrals',
@@ -117,7 +115,6 @@ const navItems: NavItem[] = [
     id: 'complaints',
     label: 'Complaints',
     icon: <MessageSquareWarning className="h-5 w-5" />,
-    badge: 4,
   },
   {
     id: 'documents',
@@ -138,13 +135,68 @@ export default function Sidebar({
   isOpen,
   onClose,
 }: SidebarProps) {
-  const { visibleModules } = useRBAC();
+  const { visibleModules, hospitalId: rbacHospitalId } = useRBAC();
+  const { user } = useAuth();
+
+  const [badgeCounts, setBadgeCounts] = useState<SidebarBadgeCounts>({
+    appointments: 0,
+    referrals: 0,
+    'medicine-stock': 0,
+    'lab-reports': 0,
+  });
+
+  const targetHospitalId = user?.hospital_id || rbacHospitalId || getCurrentHospitalId();
+
+  const loadBadges = useCallback(async () => {
+    try {
+      const counts = await badgeService.getHospitalBadges(targetHospitalId);
+      setBadgeCounts(counts);
+    } catch (e) {
+      console.warn('Failed to load sidebar badges:', e);
+    }
+  }, [targetHospitalId]);
+
+  useEffect(() => {
+    loadBadges();
+  }, [loadBadges, currentPage]);
 
   const handleNavigate = (page: PageType) => {
     onNavigate(page);
   };
 
   const visibleNavItems = navItems.filter((item) => visibleModules.includes(item.id));
+
+  const getBadgeInfo = (id: PageType): { count: number; tooltip: string; color: string } | null => {
+    if (id === 'appointments' && badgeCounts.appointments > 0) {
+      return {
+        count: badgeCounts.appointments,
+        tooltip: `${badgeCounts.appointments} booked appointment(s) awaiting action`,
+        color: 'bg-rose-500 text-white',
+      };
+    }
+    if (id === 'referrals' && badgeCounts.referrals > 0) {
+      return {
+        count: badgeCounts.referrals,
+        tooltip: `${badgeCounts.referrals} incoming referral request(s) pending review`,
+        color: 'bg-amber-500 text-white',
+      };
+    }
+    if (id === 'medicine-stock' && badgeCounts['medicine-stock'] > 0) {
+      return {
+        count: badgeCounts['medicine-stock'],
+        tooltip: `${badgeCounts['medicine-stock']} medicine(s) low in stock or expired`,
+        color: 'bg-rose-600 text-white',
+      };
+    }
+    if (id === 'lab-reports' && badgeCounts['lab-reports'] > 0) {
+      return {
+        count: badgeCounts['lab-reports'],
+        tooltip: `${badgeCounts['lab-reports']} pending diagnostic report(s)`,
+        color: 'bg-sky-500 text-white',
+      };
+    }
+    return null;
+  };
 
   return (
     <>
@@ -235,16 +287,22 @@ export default function Sidebar({
                   >
                     {item.label}
                   </span>
-                  {item.badge && (
-                    <span
-                      className={cn(
-                        'flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-xs font-bold transition-all duration-200',
-                        isCollapsed && 'lg:hidden'
-                      )}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
+                  {(() => {
+                    const badgeInfo = getBadgeInfo(item.id);
+                    if (!badgeInfo || badgeInfo.count <= 0) return null;
+                    return (
+                      <span
+                        title={badgeInfo.tooltip}
+                        className={cn(
+                          'flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold transition-all duration-200 animate-in fade-in',
+                          badgeInfo.color,
+                          isCollapsed && 'lg:hidden'
+                        )}
+                      >
+                        {badgeInfo.count}
+                      </span>
+                    );
+                  })()}
                 </button>
               </li>
             ))}

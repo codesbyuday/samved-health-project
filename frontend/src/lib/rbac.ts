@@ -59,7 +59,9 @@ type PermissionAction =
   | "staff-management.view"
   | "staff-management.manage"
   | "complaints.view"
-  | "complaints.manage";
+  | "complaints.manage"
+  | "documents.view"
+  | "documents.manage";
 
 const rolePermissions: Record<UserRole, Set<PermissionAction>> = {
   admin: new Set([
@@ -71,6 +73,7 @@ const rolePermissions: Record<UserRole, Set<PermissionAction>> = {
     "citizen-services.manage",
     "patients.view",
     "lab-reports.view",
+    "lab-reports.manage",
     "bed-management.view",
     "bed-management.manage",
     "infrastructure.view",
@@ -85,6 +88,8 @@ const rolePermissions: Record<UserRole, Set<PermissionAction>> = {
     "staff-management.manage",
     "complaints.view",
     "complaints.manage",
+    "documents.view",
+    "documents.manage",
   ]),
   doctor: new Set([
     "dashboard.view",
@@ -97,6 +102,7 @@ const rolePermissions: Record<UserRole, Set<PermissionAction>> = {
     "add_treatment",
     "update_treatment_full",
     "lab-reports.view",
+    "lab-reports.manage",
     "bed-management.view",
     "disease-reporting.view",
     "disease-reporting.manage",
@@ -172,7 +178,7 @@ const moduleActionMap: Record<ModuleKey, PermissionAction[]> = {
   "staff-management": ["staff-management.manage", "staff-management.view"],
   complaints: ["complaints.manage", "complaints.view"],
   settings: ["dashboard.view"],
-  documents: ["dashboard.view"],
+  documents: ["documents.manage", "documents.view"],
 };
 
 export function normalizeRole(role: string | null | undefined): UserRole | null {
@@ -180,8 +186,23 @@ export function normalizeRole(role: string | null | undefined): UserRole | null 
     return null;
   }
 
-  const normalized = role.trim().toLowerCase().replace(/\s+/g, "_") as UserRole;
-  return normalized in rolePermissions ? normalized : null;
+  const normalized = role.trim().toLowerCase().replace(/\s+/g, "_");
+  if (normalized === "hospital_admin" || normalized === "hospital_administrator" || normalized === "administrator") {
+    return "admin";
+  }
+  return normalized in rolePermissions ? (normalized as UserRole) : null;
+}
+
+export function isHospitalAdmin(role: string | null | undefined, designation?: string | null | undefined): boolean {
+  const normRole = normalizeRole(role);
+  if (normRole === "admin") return true;
+  if (designation) {
+    const normDesig = designation.trim().toLowerCase();
+    if (normDesig === "hospital administrator" || normDesig === "administrator" || normDesig === "admin") {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function hasPermission(role: string | null | undefined, action: PermissionAction) {
@@ -194,11 +215,11 @@ export function hasHospitalAccess(userHospitalId: string | null | undefined, rec
     return false;
   }
 
-  return userHospitalId === recordHospitalId;
+  return userHospitalId.trim().toLowerCase() === recordHospitalId.trim().toLowerCase();
 }
 
 export function getModuleAccess(role: string | null | undefined, moduleKey: ModuleKey): AccessLevel {
-  if (moduleKey === "settings" || moduleKey === "documents") {
+  if (moduleKey === "settings") {
     return role ? "full" : "none";
   }
 
@@ -273,6 +294,12 @@ export function getModuleAccess(role: string | null | undefined, moduleKey: Modu
       return hasPermission(role, "complaints.manage")
         ? "full"
         : hasPermission(role, "complaints.view")
+          ? "view"
+          : "none";
+    case "documents":
+      return hasPermission(role, "documents.manage")
+        ? "full"
+        : hasPermission(role, "documents.view")
           ? "view"
           : "none";
     default:

@@ -73,6 +73,8 @@ export type ComplaintRow = {
   hospitalName: string;
   priority: string | null;
   status: string | null;
+  description?: string | null;
+  category?: string | null;
   remarks: string | null;
   createdAt: string | null;
 };

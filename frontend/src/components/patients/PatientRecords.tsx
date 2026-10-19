@@ -63,6 +63,7 @@ import {
   vaccinationRecordService,
   diseaseService,
   recentPatientsService,
+  getCurrentHospitalId,
   hospitalSearchService,
   doctorSearchService,
   diseaseSearchService,
@@ -77,6 +78,7 @@ import {
   type RecentPatient,
 } from '@/services/database';
 import { storageService } from '@/services/storage';
+import { supabase } from '@/lib/supabase';
 
 // Helper function to calculate age from date of birth
 function calculateAge(dateOfBirth: string | null): number | null {
@@ -121,7 +123,11 @@ interface ReportedDiseaseForm {
   status: string;
 }
 
-export default function PatientRecords() {
+interface PatientRecordsProps {
+  initialCitizen?: Citizen | null;
+}
+
+export default function PatientRecords({ initialCitizen }: PatientRecordsProps = {}) {
   const { user } = useAuth();
   const { hasPermission } = useRBAC();
   const canAddTreatment = hasPermission('add_treatment');
@@ -167,11 +173,14 @@ export default function PatientRecords() {
 
   // State for search
   const [searchQuery, setSearchQuery] = useState('');
+  const [idType, setIdType] = useState<'health_id' | 'aadhar_id' | 'phone'>('health_id');
   const [searchResults, setSearchResults] = useState<Citizen[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // State for selected citizen
-  const [selectedCitizen, setSelectedCitizen] = useState<Citizen | null>(null);
+  const [selectedCitizen, setSelectedCitizen] = useState<Citizen | null>(initialCitizen || null);
   const [isLoading, setIsLoading] = useState(false);
 
   // State for recent patients dialog
@@ -253,44 +262,12 @@ export default function PatientRecords() {
   const [referralUrgency, setReferralUrgency] = useState<'normal' | 'urgent' | 'emergency'>('normal');
   const [isSubmittingReferral, setIsSubmittingReferral] = useState(false);
 
-  // Search functionality
-  const handleSearch = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const { data, error } = await citizenService.search(query);
-      if (error) {
-        console.error('Search error:', error);
-        setSearchResults([]);
-      } else {
-        setSearchResults(data || []);
-      }
-    } catch (error) {
-      console.error('Search error:', error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, []);
-
-  // Debounced search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      handleSearch(searchQuery);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, handleSearch]);
-
-  // Load recent patients
+  // Load recent patients (strictly latest 10 for logged-in user's hospital)
   const loadRecentPatients = useCallback(async () => {
     setIsLoadingRecent(true);
     try {
-      const { data, error } = await recentPatientsService.getRecent(20);
+      const targetHospitalId = user?.hospital_id || currentHospital?.hospital_id || getCurrentHospitalId();
+      const { data, error } = await recentPatientsService.getRecent(10, targetHospitalId);
       if (error) {
         console.error('Error loading recent patients:', error);
       } else {
@@ -301,7 +278,7 @@ export default function PatientRecords() {
     } finally {
       setIsLoadingRecent(false);
     }
-  }, []);
+  }, [user?.hospital_id, currentHospital?.hospital_id]);
 
   // Load citizen data
   const loadCitizenData = useCallback(async (citizenId: string) => {
@@ -343,10 +320,54 @@ export default function PatientRecords() {
   // Handle citizen selection
   const handleSelectCitizen = useCallback((citizen: Citizen) => {
     setSelectedCitizen(citizen);
-    setSearchQuery('');
-    setSearchResults([]);
+    setSearchError(null);
     loadCitizenData(citizen.citizen_id);
   }, [loadCitizenData]);
+
+  // Sync initialCitizen when navigated with a pre-selected citizen (e.g. from top search)
+  useEffect(() => {
+    if (initialCitizen) {
+      handleSelectCitizen(initialCitizen);
+      setSearchQuery(initialCitizen.citizen_id);
+      setSearchResults([initialCitizen]);
+      setHasSearched(true);
+    }
+  }, [initialCitizen, handleSelectCitizen]);
+
+  // Search functionality (No dynamic debounce, triggers only on Search click or Enter)
+  const handleSearch = useCallback(async () => {
+    const clean = searchQuery.trim();
+    if (!clean) {
+      toast.warning('Please enter an ID or phone number to search');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+    setHasSearched(true);
+    try {
+      const { data, error } = await citizenService.searchByIdType(idType, clean);
+      if (error) {
+        console.error('Search error:', error);
+        setSearchError(error);
+        setSearchResults([]);
+      } else {
+        const results = data || [];
+        setSearchResults(results);
+        if (results.length === 0) {
+          setSearchError('Citizen not found in system');
+        } else if (results.length === 1) {
+          handleSelectCitizen(results[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchError('Search failed');
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [idType, searchQuery, handleSelectCitizen]);
 
   // Handle recent patient click
   const handleRecentPatientClick = useCallback((patient: RecentPatient) => {
@@ -363,9 +384,14 @@ export default function PatientRecords() {
       blood_group: patient.blood_group,
       user_photo_url: patient.user_photo_url,
       date_of_birth: patient.date_of_birth,
+      latest_visit_date: patient.latest_visit_date,
+      last_visit: patient.last_visit,
       created_at: patient.created_at
     };
     setSelectedCitizen(citizen);
+    setSearchQuery(patient.citizen_id);
+    setSearchResults([citizen]);
+    setHasSearched(true);
     setShowRecentPatients(false);
     loadCitizenData(patient.citizen_id);
   }, [loadCitizenData]);
@@ -380,6 +406,102 @@ export default function PatientRecords() {
     });
     setRelatedDiseases(related);
   }, [diseaseCases]);
+
+  // Hydrate missing hospital address or doctor details when disease case is viewed
+  useEffect(() => {
+    if (!selectedDiseaseCase) return;
+
+    let isMounted = true;
+    const hydrateCaseDetails = async () => {
+      const needsHospitalAddress =
+        selectedDiseaseCase.hospital_id &&
+        (!selectedDiseaseCase.hospital?.address ||
+          selectedDiseaseCase.hospital?.address === 'N/A' ||
+          !selectedDiseaseCase.hospital_address ||
+          selectedDiseaseCase.hospital_address === 'N/A');
+
+      const needsDoctorInfo =
+        selectedDiseaseCase.reported_by &&
+        (!selectedDiseaseCase.doctor_name ||
+          selectedDiseaseCase.doctor_name === 'N/A' ||
+          !selectedDiseaseCase.reported_by_staff?.name);
+
+      if (!needsHospitalAddress && !needsDoctorInfo) return;
+
+      let updatedHospital = selectedDiseaseCase.hospital;
+      let updatedHospitalAddress = selectedDiseaseCase.hospital_address;
+      let updatedStaff = selectedDiseaseCase.reported_by_staff;
+      let updatedDoctorName = selectedDiseaseCase.doctor_name;
+      let updatedDepartment = selectedDiseaseCase.department;
+      let updatedDesignation = selectedDiseaseCase.designation;
+
+      if (needsHospitalAddress && selectedDiseaseCase.hospital_id) {
+        try {
+          const { data: hosp } = await supabase
+            .from('hospitals')
+            .select('name, address')
+            .eq('hospital_id', selectedDiseaseCase.hospital_id)
+            .maybeSingle();
+
+          if (hosp && hosp.address) {
+            updatedHospital = {
+              ...(updatedHospital || {}),
+              name: hosp.name || updatedHospital?.name,
+              address: hosp.address,
+            } as Hospital;
+            updatedHospitalAddress = hosp.address;
+          }
+        } catch (err) {
+          console.error('Error fetching hospital address:', err);
+        }
+      }
+
+      if (needsDoctorInfo && selectedDiseaseCase.reported_by) {
+        try {
+          const { data: staff } = await supabase
+            .from('hospital_staff')
+            .select('name, department, designation')
+            .or(
+              `staff_uuid.eq.${selectedDiseaseCase.reported_by},user_id.eq.${selectedDiseaseCase.reported_by},staff_id.eq.${selectedDiseaseCase.reported_by}`
+            )
+            .maybeSingle();
+
+          if (staff) {
+            updatedStaff = staff as unknown as HospitalStaff;
+            updatedDoctorName = staff.name;
+            updatedDepartment = staff.department;
+            updatedDesignation = staff.designation;
+          }
+        } catch (err) {
+          console.error('Error fetching doctor details:', err);
+        }
+      }
+
+      if (isMounted) {
+        setSelectedDiseaseCase((prev) => {
+          if (!prev || prev.case_id !== selectedDiseaseCase.case_id) return prev;
+          return {
+            ...prev,
+            hospital: updatedHospital,
+            hospital_address: updatedHospitalAddress,
+            reported_by_staff: updatedStaff,
+            doctor_name: updatedDoctorName,
+            department: updatedDepartment,
+            designation: updatedDesignation,
+          };
+        });
+      }
+    };
+
+    void hydrateCaseDetails();
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    selectedDiseaseCase?.case_id,
+    selectedDiseaseCase?.hospital_id,
+    selectedDiseaseCase?.reported_by,
+  ]);
 
   // Referral - Destination Hospital search
   useEffect(() => {
@@ -594,7 +716,7 @@ export default function PatientRecords() {
     }
     
     setIsCreatingDisease(true);
-    const { data, error } = await diseaseSearchService.create({
+    const { data, error } = await diseaseSearchService.createDisease({
       disease_name: newDiseaseName,
       disease_type: newDiseaseType || null,
       disease_category: newDiseaseCategory,
@@ -863,20 +985,88 @@ export default function PatientRecords() {
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col items-center gap-4">
-            <div className="w-full max-w-2xl">
-              <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                Search Patient by Health Card UID, Name, Phone, or Aadhar
+            <div className="w-full max-w-2xl space-y-2">
+              <Label className="text-sm font-medium text-slate-700 dark:text-slate-300 block">
+                Search Patient Records
               </Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                <Input
-                  placeholder="Enter Health Card UID (e.g., SMC-2024-001234), Name, or Phone..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-12 text-base"
-                />
-                {isSearching && (
-                  <Loader2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-slate-400" />
+              <div className="flex flex-col sm:flex-row gap-2">
+                {/* ID Type Select */}
+                <Select
+                  value={idType}
+                  onValueChange={(val: 'health_id' | 'aadhar_id' | 'phone') => {
+                    setIdType(val);
+                    setSearchError(null);
+                    setHasSearched(false);
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-[170px] shrink-0 bg-slate-50 dark:bg-slate-800">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="health_id">Health ID (SMC)</SelectItem>
+                    <SelectItem value="aadhar_id">Aadhaar ID</SelectItem>
+                    <SelectItem value="phone">Phone Number</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* ID Text Input */}
+                <div className="relative flex-1">
+                  <Input
+                    placeholder={
+                      idType === 'health_id'
+                        ? 'e.g., SMC-2025-000001 or SMC-2026-000132'
+                        : idType === 'aadhar_id'
+                        ? 'e.g., 900000000001 (12 digits)'
+                        : 'e.g., 9876543210 (10 digits)'
+                    }
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (searchError) setSearchError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleSearch();
+                      }
+                    }}
+                    className="h-10 bg-white dark:bg-slate-900"
+                  />
+                </div>
+
+                {/* Search Button */}
+                <Button
+                  onClick={() => void handleSearch()}
+                  disabled={isSearching || !searchQuery.trim()}
+                  className="gap-2 shrink-0 min-w-[105px] bg-[#047857] hover:bg-[#065F46] text-white"
+                >
+                  {isSearching ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4" />
+                      Search
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>
+                  {idType === 'health_id'
+                    ? "Enter citizen Health Card ID and click Search"
+                    : idType === 'aadhar_id'
+                    ? "Enter 12-digit Aadhaar number and click Search"
+                    : "Enter registered 10-digit mobile number and click Search"}
+                </span>
+                {user?.hospital_name && (
+                  <span className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+                    <Building2 className="h-3 w-3" />
+                    {user.hospital_name}
+                  </span>
                 )}
               </div>
             </div>
@@ -896,39 +1086,45 @@ export default function PatientRecords() {
               </Button>
             </div>
 
-            {/* Search Results */}
-            {searchQuery && searchResults.length > 0 && (
+            {/* Multiple Search Results Picker */}
+            {hasSearched && searchResults.length > 1 && (
               <div className="w-full max-w-2xl mt-4">
                 <p className="text-sm text-slate-500 mb-2">
-                  Found {searchResults.length} patient(s):
+                  Found {searchResults.length} patient(s). Select to view records:
                 </p>
                 <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
                   {searchResults.map((citizen) => (
                     <button
                       key={citizen.citizen_id}
                       onClick={() => handleSelectCitizen(citizen)}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 transition-colors text-left"
+                      className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left"
                     >
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
                         {citizen.name?.charAt(0) || '?'}
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium text-slate-800">{citizen.name}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-100">{citizen.name}</p>
                         <p className="text-sm text-slate-500">
-                          {citizen.citizen_id} - {getAge(citizen) ?? 'N/A'} yrs - {citizen.gender}
+                          {citizen.citizen_id} - {getAge(citizen) ?? 'N/A'} yrs - {citizen.gender || 'N/A'}
                         </p>
                       </div>
-                      <Badge variant="outline">Ward {citizen.ward_number}</Badge>
+                      <Badge variant="outline">Ward {citizen.ward_number ?? 'N/A'}</Badge>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {searchQuery && !isSearching && searchResults.length === 0 && (
-              <div className="w-full max-w-2xl mt-4 text-center py-8">
-                <AlertCircle className="h-12 w-12 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500">No patients found matching your search.</p>
+            {/* Not Found State */}
+            {hasSearched && !isSearching && searchResults.length === 0 && (
+              <div className="w-full max-w-2xl mt-4 text-center py-8 p-6 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
+                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-2" />
+                <p className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                  Citizen not found in system
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  No patient record matching &quot;{searchQuery}&quot;. Please verify the {idType === 'health_id' ? 'Health ID' : idType === 'aadhar_id' ? 'Aadhaar ID' : 'Phone Number'} entered.
+                </p>
               </div>
             )}
           </div>
@@ -1146,7 +1342,7 @@ export default function PatientRecords() {
                                 <div className="flex items-center gap-2 mb-1">
                                   <Activity className="h-4 w-4 text-primary" />
                                   <span className="font-medium text-slate-800">
-                                    {report.test_type?.test_name || 'Lab Test'}
+                                    {report.test_type?.test_name || report.test_name || 'Lab Test'}
                                   </span>
                                 </div>
                                 <p className="text-sm text-slate-500">
@@ -1155,7 +1351,7 @@ export default function PatientRecords() {
                                     : 'N/A'}
                                 </p>
                                 <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
-                                  <span>{report.hospital?.name || 'Unknown Hospital'}</span>
+                                  <span>{report.issuer_name || report.hospital?.name || report.provider?.name || 'Diagnostic Facility'}</span>
                                   <Badge
                                     variant="outline"
                                     className={cn('capitalize', getStatusBadge(report.status))}
@@ -1236,15 +1432,15 @@ export default function PatientRecords() {
                                 <div className="flex items-center gap-2 mb-1">
                                   <Bug className="h-4 w-4 text-red-500" />
                                   <span className="font-medium text-slate-800">
-                                    {diseaseCase.disease?.disease_name || 'Unknown Disease'}
+                                    {diseaseCase.disease?.disease_name || diseaseCase.disease_name || 'Unknown Disease'}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 flex-wrap mt-1">
                                   <Badge variant="outline" className="capitalize">
-                                    {diseaseCase.disease?.disease_category || 'N/A'}
+                                    {diseaseCase.disease?.disease_category || diseaseCase.disease_category || 'N/A'}
                                   </Badge>
                                   <Badge variant="outline" className="capitalize">
-                                    {diseaseCase.disease?.disease_type || 'N/A'}
+                                    {diseaseCase.disease?.disease_type || diseaseCase.disease_type || 'N/A'}
                                   </Badge>
                                   <Badge
                                     variant="outline"
@@ -1259,11 +1455,19 @@ export default function PatientRecords() {
                                     {diseaseCase.status || 'N/A'}
                                   </Badge>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-2">
-                                  Reported: {diseaseCase.report_date
-                                    ? format(parseISO(diseaseCase.report_date), 'MMM dd, yyyy')
-                                    : 'N/A'}
-                                </p>
+                                <div className="flex items-center gap-3 text-xs text-slate-500 mt-2 flex-wrap">
+                                  <span>
+                                    Reported: {diseaseCase.report_date
+                                      ? format(parseISO(diseaseCase.report_date), 'MMM dd, yyyy')
+                                      : 'N/A'}
+                                  </span>
+                                  {(diseaseCase.hospital?.name || diseaseCase.hospital_name) && (
+                                    <span>• {diseaseCase.hospital?.name || diseaseCase.hospital_name}</span>
+                                  )}
+                                  {(diseaseCase.reported_by_staff?.name || diseaseCase.doctor_name) && (
+                                    <span>• Dr. {(diseaseCase.reported_by_staff?.name || diseaseCase.doctor_name)?.replace(/^Dr\.?\s*/i, '')}</span>
+                                  )}
+                                </div>
                               </div>
                               <div className="flex gap-2">
                                 <Button
@@ -1302,9 +1506,16 @@ export default function PatientRecords() {
       <Dialog open={showRecentPatients} onOpenChange={setShowRecentPatients}>
         <DialogContent className="max-w-2xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>Recent Patients</DialogTitle>
+            <div className="flex items-center justify-between pr-6">
+              <DialogTitle>Recent Patients</DialogTitle>
+              {user?.hospital_name && (
+                <Badge variant="outline" className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-xs font-normal">
+                  {user.hospital_name}
+                </Badge>
+              )}
+            </div>
             <DialogDescription>
-              Patients sorted by most recent hospital visit
+              Patients sorted by most recent visit at {user?.hospital_name || 'this hospital'} (Latest 10 records)
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-96">
@@ -1315,31 +1526,38 @@ export default function PatientRecords() {
             ) : recentPatients.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 <UserCircle className="h-12 w-12 mx-auto mb-2 text-slate-300" />
-                <p>No recent patients found.</p>
+                <p>No recent patients found for this hospital.</p>
               </div>
             ) : (
               <div className="divide-y">
-                {recentPatients.map((patient) => (
+                {recentPatients.slice(0, 10).map((patient) => (
                   <button
                     key={patient.citizen_id}
                     onClick={() => handleRecentPatientClick(patient)}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 transition-colors text-left"
+                    className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
-                      {patient.name?.charAt(0) || '?'}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 font-semibold text-sm">
+                      {patient.name?.charAt(0)?.toUpperCase() || '?'}
                     </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-800">{patient.name}</p>
-                      <p className="text-sm text-slate-500">
-                        {patient.citizen_id} - {patient.phone || 'No phone'}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-800 dark:text-slate-100 truncate">{patient.name}</p>
+                      <p className="text-sm text-slate-500 font-mono">
+                        {patient.citizen_id} • {patient.phone || 'No phone'}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="text-xs text-slate-500">Last Visit</p>
-                      <p className="text-sm font-medium">
-                        {patient.latest_visit_date
-                          ? format(parseISO(patient.latest_visit_date), 'MMM dd, yyyy')
-                          : 'N/A'}
+                      <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                        {(() => {
+                          const vDate = patient.latest_visit_date || patient.last_visit;
+                          if (!vDate) return 'N/A';
+                          try {
+                            const d = new Date(vDate);
+                            return isNaN(d.getTime()) ? 'N/A' : format(d, 'MMM dd, yyyy');
+                          } catch {
+                            return 'N/A';
+                          }
+                        })()}
                       </p>
                     </div>
                   </button>
@@ -1504,41 +1722,41 @@ export default function PatientRecords() {
 
       {/* Lab Report Detail Dialog */}
       <Dialog open={!!selectedLabReport} onOpenChange={() => setSelectedLabReport(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6 overflow-hidden">
+          <DialogHeader className="shrink-0 pb-2">
             <DialogTitle>Lab Report Details</DialogTitle>
             <DialogDescription>
               Complete information about this lab report
             </DialogDescription>
           </DialogHeader>
           {selectedLabReport && (
-            <ScrollArea className="max-h-[70vh]">
-              <div className="space-y-4 pr-4">
-                {/* Test Info */}
-                <div className="p-4 rounded-lg border bg-slate-50">
-                  <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
-                    Test Information
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Test Name:</span>
-                      <p className="font-medium">{selectedLabReport.test_type?.test_name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Test Category:</span>
-                      <p className="font-medium">{selectedLabReport.test_type?.test_category || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Test Date:</span>
-                      <p className="font-medium">
-                        {selectedLabReport.test_date
-                          ? format(parseISO(selectedLabReport.test_date), 'MMMM dd, yyyy')
-                          : 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Status:</span>
+            <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pr-1 py-1">
+              {/* Test Info */}
+              <div className="p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-emerald-600" />
+                  Test Information
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Test Name:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{selectedLabReport.test_type?.test_name || selectedLabReport.test_name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Test Category:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{selectedLabReport.test_type?.test_category || selectedLabReport.test_category || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Test Date:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedLabReport.test_date
+                        ? format(parseISO(selectedLabReport.test_date), 'MMMM dd, yyyy')
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Status:</span>
+                    <div className="mt-0.5">
                       <Badge
                         variant="outline"
                         className={cn('capitalize', getStatusBadge(selectedLabReport.status))}
@@ -1548,57 +1766,69 @@ export default function PatientRecords() {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Hospital Info */}
-                <div className="p-4 rounded-lg border bg-slate-50">
-                  <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Hospital Information
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Hospital Name:</span>
-                      <p className="font-medium">{selectedLabReport.hospital?.name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Hospital Address:</span>
-                      <p className="font-medium">{selectedLabReport.hospital?.address || 'N/A'}</p>
-                    </div>
+              {/* Facility & Issuer Info */}
+              <div className="p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  Diagnostic Facility & Issuer Information
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Facility Type:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedLabReport.issuer_type || (selectedLabReport.hospital_id ? 'Hospital' : selectedLabReport.provider_id ? 'Diagnostic Laboratory' : 'Health Facility')}
+                    </p>
                   </div>
-                </div>
-
-                {/* Result Info */}
-                <div className="p-4 rounded-lg border bg-slate-50">
-                  <h4 className="font-medium text-slate-800 mb-3">Results</h4>
-                  <div className="space-y-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Result:</span>
-                      <p className="font-medium whitespace-pre-wrap">{selectedLabReport.result || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Description:</span>
-                      <p className="font-medium whitespace-pre-wrap">{selectedLabReport.description || 'N/A'}</p>
-                    </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Facility / Issuer Name:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedLabReport.issuer_name || selectedLabReport.hospital?.name || selectedLabReport.provider?.name || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-slate-500 dark:text-slate-400">Address / Location:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedLabReport.issuer_address || selectedLabReport.hospital?.address || selectedLabReport.provider?.address || 'N/A'}
+                    </p>
                   </div>
                 </div>
               </div>
-            </ScrollArea>
+
+              {/* Result Info */}
+              <div className="p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3">Results</h4>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Result:</span>
+                    <p className="font-medium whitespace-pre-wrap text-slate-900 dark:text-slate-100">{selectedLabReport.result || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Description:</span>
+                    <p className="font-medium whitespace-pre-wrap text-slate-900 dark:text-slate-100">{selectedLabReport.description || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
           {selectedLabReport?.report_file_url && (
-            <div className="flex gap-2 pt-4">
+            <div className="shrink-0 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 mt-2">
               <Button
+                type="button"
                 variant="outline"
-                className="flex-1"
+                className="gap-2"
                 onClick={() => handleViewReport(selectedLabReport)}
               >
-                <ExternalLink className="h-4 w-4 mr-2" />
+                <ExternalLink className="h-4 w-4" />
                 View Report
               </Button>
               <Button
-                className="flex-1"
+                type="button"
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => handleDownloadReport(selectedLabReport)}
               >
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="h-4 w-4" />
                 Download Report
               </Button>
             </div>
@@ -1684,92 +1914,114 @@ export default function PatientRecords() {
 
       {/* Disease Case Detail Dialog */}
       <Dialog open={!!selectedDiseaseCase} onOpenChange={() => setSelectedDiseaseCase(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6 overflow-hidden">
+          <DialogHeader className="shrink-0 pb-2">
             <DialogTitle>Disease Case Details</DialogTitle>
             <DialogDescription>
-              Complete information about this reported disease
+              Complete information about this reported disease case
             </DialogDescription>
           </DialogHeader>
           {selectedDiseaseCase && (
-            <ScrollArea className="max-h-[70vh]">
-              <div className="space-y-4 pr-4">
-                {/* Disease Info */}
-                <div className="p-4 rounded-lg border bg-slate-50">
-                  <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
-                    <Bug className="h-4 w-4" />
-                    Disease Information
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Disease Name:</span>
-                      <p className="font-medium">{selectedDiseaseCase.disease?.disease_name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Disease Type:</span>
-                      <p className="font-medium">{selectedDiseaseCase.disease?.disease_type || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Category:</span>
-                      <p className="font-medium capitalize">{selectedDiseaseCase.disease?.disease_category || 'N/A'}</p>
-                    </div>
+            <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pr-1">
+              {/* Disease Info */}
+              <div className="p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                  <Bug className="h-4 w-4 text-rose-600" />
+                  Disease Information
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Disease Name:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{selectedDiseaseCase.disease?.disease_name || selectedDiseaseCase.disease_name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Disease Type:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{selectedDiseaseCase.disease?.disease_type || selectedDiseaseCase.disease_type || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Category:</span>
+                    <p className="font-medium capitalize text-slate-900 dark:text-slate-100">{selectedDiseaseCase.disease?.disease_category || selectedDiseaseCase.disease_category || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Notifiable Condition:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedDiseaseCase.disease?.is_notifiable !== undefined && selectedDiseaseCase.disease?.is_notifiable !== null
+                        ? selectedDiseaseCase.disease.is_notifiable
+                          ? 'Yes (Mandatory Reporting)'
+                          : 'No'
+                        : 'N/A'}
+                    </p>
                   </div>
                 </div>
+              </div>
 
-                {/* Hospital Info */}
-                <div className="p-4 rounded-lg border bg-slate-50">
-                  <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Reporting Hospital
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Hospital Name:</span>
-                      <p className="font-medium">{selectedDiseaseCase.hospital?.name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Hospital Address:</span>
-                      <p className="font-medium">{selectedDiseaseCase.hospital?.address || 'N/A'}</p>
-                    </div>
+              {/* Hospital Info */}
+              <div className="p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  Reporting Hospital
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Hospital Name:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{selectedDiseaseCase.hospital?.name || selectedDiseaseCase.hospital_name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Hospital Address:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{selectedDiseaseCase.hospital?.address || selectedDiseaseCase.hospital_address || 'N/A'}</p>
                   </div>
                 </div>
+              </div>
 
-                {/* Reporting Doctor Info */}
-                <div className="p-4 rounded-lg border bg-slate-50">
-                  <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
-                    <UserCheck className="h-4 w-4" />
-                    Reporting Doctor
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Doctor Name:</span>
-                      <p className="font-medium">{selectedDiseaseCase.reported_by_staff?.name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Department:</span>
-                      <p className="font-medium">{selectedDiseaseCase.reported_by_staff?.department || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Designation:</span>
-                      <p className="font-medium">{selectedDiseaseCase.reported_by_staff?.designation || 'N/A'}</p>
-                    </div>
+              {/* Reporting Doctor Info */}
+              <div className="p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-emerald-600" />
+                  Reporting Doctor
+                </h4>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Doctor Name:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedDiseaseCase.reported_by_staff?.name || selectedDiseaseCase.doctor_name || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Department:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedDiseaseCase.reported_by_staff?.department || selectedDiseaseCase.department || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Designation:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedDiseaseCase.reported_by_staff?.designation || selectedDiseaseCase.designation || 'N/A'}
+                    </p>
                   </div>
                 </div>
+              </div>
 
-                {/* Case Details */}
-                <div className="p-4 rounded-lg border bg-slate-50">
-                  <h4 className="font-medium text-slate-800 mb-3">Case Details</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Report Date:</span>
-                      <p className="font-medium">
-                        {selectedDiseaseCase.report_date
-                          ? format(parseISO(selectedDiseaseCase.report_date), 'MMMM dd, yyyy')
-                          : 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Severity:</span>
+              {/* Case Details */}
+              <div className="p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3">Case Details</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Report Date:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedDiseaseCase.report_date
+                        ? format(parseISO(selectedDiseaseCase.report_date), 'MMMM dd, yyyy')
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Ward Number:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {selectedDiseaseCase.ward_number ? `Ward ${selectedDiseaseCase.ward_number}` : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Severity:</span>
+                    <div className="mt-0.5">
                       <Badge
                         variant="outline"
                         className={cn('capitalize', getSeverityBadge(selectedDiseaseCase.severity))}
@@ -1777,8 +2029,10 @@ export default function PatientRecords() {
                         {selectedDiseaseCase.severity || 'N/A'}
                       </Badge>
                     </div>
-                    <div>
-                      <span className="text-slate-500">Status:</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">Status:</span>
+                    <div className="mt-0.5">
                       <Badge
                         variant="outline"
                         className={cn('capitalize', getStatusBadge(selectedDiseaseCase.status))}
@@ -1786,14 +2040,28 @@ export default function PatientRecords() {
                         {selectedDiseaseCase.status || 'N/A'}
                       </Badge>
                     </div>
-                    <div>
-                      <span className="text-slate-500">Ward Number:</span>
-                      <p className="font-medium">{selectedDiseaseCase.ward_number || 'N/A'}</p>
-                    </div>
                   </div>
+                  <div className="col-span-2">
+                    <span className="text-slate-500 dark:text-slate-400">Case ID:</span>
+                    <p className="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 break-all">{selectedDiseaseCase.case_id || 'N/A'}</p>
+                  </div>
+                  {selectedDiseaseCase.updated_at && (
+                    <div className="col-span-2">
+                      <span className="text-slate-500 dark:text-slate-400">Last Updated:</span>
+                      <p className="font-medium text-slate-900 dark:text-slate-100">
+                        {(() => {
+                          try {
+                            return format(parseISO(selectedDiseaseCase.updated_at), 'MMMM dd, yyyy, hh:mm a');
+                          } catch {
+                            return selectedDiseaseCase.updated_at;
+                          }
+                        })()}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -1,13 +1,13 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 const COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
+  "#10b981", // Emerald (Active)
+  "#f43f5e", // Rose (Inactive)
+  "#3b82f6", // Blue
+  "#f59e0b", // Amber
+  "#8b5cf6", // Purple
 ];
 
 export function PieBreakdownChart({
@@ -15,20 +15,35 @@ export function PieBreakdownChart({
 }: {
   data: { label: string; value: number }[];
 }) {
+  const chartData = data && data.length > 0 ? data : [{ label: "None", value: 1 }];
+
   return (
     <div className="h-72 min-h-72 w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
         <PieChart>
-          <Tooltip />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "var(--card)",
+              borderColor: "var(--border)",
+              borderRadius: "0.75rem",
+              fontSize: "0.75rem",
+              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+            }}
+          />
+          <Legend
+            verticalAlign="bottom"
+            height={36}
+            formatter={(value) => <span className="text-xs text-foreground font-medium">{value}</span>}
+          />
           <Pie
-            data={data}
+            data={chartData}
             dataKey="value"
             nameKey="label"
-            outerRadius={100}
-            innerRadius={56}
-            paddingAngle={3}
+            outerRadius={85}
+            innerRadius={50}
+            paddingAngle={chartData.length > 1 ? 4 : 0}
           >
-            {data.map((entry, index) => (
+            {chartData.map((entry, index) => (
               <Cell key={entry.label} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>
@@ -37,4 +52,3 @@ export function PieBreakdownChart({
     </div>
   );
 }
-

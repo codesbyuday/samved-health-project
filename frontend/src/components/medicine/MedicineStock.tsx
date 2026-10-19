@@ -57,59 +57,114 @@ import {
   Building2,
   User,
   AlertCircle,
+  ShieldAlert,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   medicineStockService,
   medicinesService,
   hospitalSearchService,
+  getCurrentHospitalId,
   type MedicineStock,
   type Medicine,
   type Hospital,
   type HospitalStaff,
 } from '@/services/database';
 
-type StockStatus = 'in-stock' | 'low-stock' | 'out-of-stock' | 'expiring-soon';
+export type StockStatus = 'in-stock' | 'low-stock' | 'out-of-stock' | 'expiring-soon' | 'expired';
 
-const getStockStatus = (stock: MedicineStock): StockStatus => {
+export const isExpired = (expiryDateStr: string | null | undefined): boolean => {
+  if (!expiryDateStr) return false;
+  const expiry = new Date(expiryDateStr);
+  if (isNaN(expiry.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  expiry.setHours(23, 59, 59, 999);
+  return expiry.getTime() < today.getTime();
+};
+
+export const isExpiringSoon = (expiryDateStr: string | null | undefined, daysThreshold: number = 30): boolean => {
+  if (!expiryDateStr) return false;
+  const expiry = new Date(expiryDateStr);
+  if (isNaN(expiry.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  expiry.setHours(23, 59, 59, 999);
+  const diffTime = expiry.getTime() - today.getTime();
+  return diffTime >= 0 && diffTime <= daysThreshold * 24 * 60 * 60 * 1000;
+};
+
+export const getDaysUntilExpiry = (expiryDateStr: string | null | undefined): number | null => {
+  if (!expiryDateStr) return null;
+  const expiry = new Date(expiryDateStr);
+  if (isNaN(expiry.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  expiry.setHours(0, 0, 0, 0);
+  return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+export const getStockStatus = (stock: MedicineStock): StockStatus => {
   const quantity = stock.quantity ?? 0;
   const threshold = stock.threshold ?? 0;
   const expiryDate = stock.expiry_date;
 
   if (quantity === 0) return 'out-of-stock';
+  if (isExpired(expiryDate)) return 'expired';
   if (quantity < threshold) return 'low-stock';
-  if (expiryDate && new Date(expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)) {
-    return 'expiring-soon';
-  }
+  if (isExpiringSoon(expiryDate)) return 'expiring-soon';
   return 'in-stock';
 };
 
-const stockStatusConfig: Record<StockStatus, { color: string; label: string; bgColor: string }> = {
+export const stockStatusConfig: Record<
+  StockStatus,
+  { color: string; label: string; bgColor: string; borderColor: string; dotColor: string }
+> = {
   'in-stock': {
-    color: 'text-green-700',
+    color: 'text-emerald-700 dark:text-emerald-300',
     label: 'In Stock',
-    bgColor: 'bg-green-100',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950/40',
+    borderColor: 'border-emerald-200 dark:border-emerald-800',
+    dotColor: 'bg-emerald-500',
   },
   'low-stock': {
-    color: 'text-amber-700',
+    color: 'text-amber-700 dark:text-amber-300',
     label: 'Low Stock',
-    bgColor: 'bg-amber-100',
+    bgColor: 'bg-amber-50 dark:bg-amber-950/40',
+    borderColor: 'border-amber-200 dark:border-amber-800',
+    dotColor: 'bg-amber-500',
   },
   'out-of-stock': {
-    color: 'text-red-700',
+    color: 'text-slate-700 dark:text-slate-300',
     label: 'Out of Stock',
-    bgColor: 'bg-red-100',
+    bgColor: 'bg-slate-100 dark:bg-slate-800',
+    borderColor: 'border-slate-300 dark:border-slate-700',
+    dotColor: 'bg-slate-500',
   },
   'expiring-soon': {
-    color: 'text-orange-700',
+    color: 'text-orange-700 dark:text-orange-300',
     label: 'Expiring Soon',
-    bgColor: 'bg-orange-100',
+    bgColor: 'bg-orange-50 dark:bg-orange-950/40',
+    borderColor: 'border-orange-200 dark:border-orange-800',
+    dotColor: 'bg-orange-500',
+  },
+  'expired': {
+    color: 'text-rose-700 dark:text-rose-300',
+    label: 'Expired',
+    bgColor: 'bg-rose-50 dark:bg-rose-950/40',
+    borderColor: 'border-rose-200 dark:border-rose-800',
+    dotColor: 'bg-rose-600',
   },
 };
 
 export default function MedicineStockComponent() {
+  const { user } = useAuth();
+  const currentHospitalId = user?.hospital_id || getCurrentHospitalId();
+
   // State for stock data
   const [stockData, setStockData] = useState<MedicineStock[]>([]);
   const [medicines, setMedicines] = useState<Medicine[]>([]);
@@ -135,7 +190,7 @@ export default function MedicineStockComponent() {
     quantity: '',
     threshold: '',
     expiry_date: '',
-    hospital_id: '',
+    hospital_id: currentHospitalId,
   });
 
   // Hospital search
@@ -155,7 +210,7 @@ export default function MedicineStockComponent() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await medicineStockService.getAll();
+      const result = await medicineStockService.getAll(currentHospitalId);
       if (result.error) {
         setError(result.error);
         toast.error(result.error);
@@ -169,7 +224,7 @@ export default function MedicineStockComponent() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentHospitalId]);
 
   // Load medicines list
   const loadMedicines = useCallback(async () => {
@@ -266,11 +321,12 @@ export default function MedicineStockComponent() {
   // Calculate stock summary
   const stockSummary = useMemo(() => {
     const total = stockData.length;
-    const lowStock = stockData.filter((s) => getStockStatus(s) === 'low-stock').length;
+    const expired = stockData.filter((s) => getStockStatus(s) === 'expired').length;
     const outOfStock = stockData.filter((s) => getStockStatus(s) === 'out-of-stock').length;
+    const lowStock = stockData.filter((s) => getStockStatus(s) === 'low-stock').length;
     const expiringSoon = stockData.filter((s) => getStockStatus(s) === 'expiring-soon').length;
-    const inStock = total - lowStock - outOfStock;
-    return { total, lowStock, outOfStock, expiringSoon, inStock };
+    const inStock = stockData.filter((s) => getStockStatus(s) === 'in-stock').length;
+    return { total, inStock, lowStock, outOfStock, expiringSoon, expired };
   }, [stockData]);
 
   // Reset form
@@ -280,7 +336,7 @@ export default function MedicineStockComponent() {
       quantity: '',
       threshold: '',
       expiry_date: '',
-      hospital_id: '',
+      hospital_id: currentHospitalId,
     });
     setSelectedMedicine(null);
     setSelectedHospital(null);
@@ -343,7 +399,7 @@ export default function MedicineStockComponent() {
         quantity: parseInt(formData.quantity),
         threshold: formData.threshold ? parseInt(formData.threshold) : null,
         expiry_date: formData.expiry_date || null,
-        hospital_id: selectedHospital?.hospital_id || null,
+        hospital_id: selectedHospital?.hospital_id || currentHospitalId || null,
       });
 
       if (error) {
@@ -376,7 +432,7 @@ export default function MedicineStockComponent() {
         quantity: parseInt(formData.quantity),
         threshold: formData.threshold ? parseInt(formData.threshold) : null,
         expiry_date: formData.expiry_date || null,
-        hospital_id: selectedHospital?.hospital_id || null,
+        hospital_id: selectedHospital?.hospital_id || selectedStock.hospital_id || currentHospitalId || null,
       });
 
       if (error) {
@@ -418,8 +474,8 @@ export default function MedicineStockComponent() {
   };
 
   // Handle card click for filtering
-  const handleCardClick = (status: 'all' | 'in-stock' | 'low-stock' | 'out-of-stock' | 'expiring-soon') => {
-    if (status === 'all') {
+  const handleCardClick = (status: 'all' | StockStatus) => {
+    if (statusFilter === status) {
       setStatusFilter('all');
     } else {
       setStatusFilter(status);
@@ -449,37 +505,56 @@ export default function MedicineStockComponent() {
       </div>
 
       {/* Alert Banner */}
-      {stockSummary.lowStock + stockSummary.outOfStock > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
-          <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-red-800 dark:text-red-200">Stock Alert</p>
-            <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+      {(stockSummary.expired > 0 || stockSummary.lowStock + stockSummary.outOfStock > 0) && (
+        <div
+          className={cn(
+            'flex items-start gap-3 rounded-lg border p-4 shadow-sm transition-all',
+            stockSummary.expired > 0
+              ? 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200'
+              : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
+          )}
+        >
+          <AlertTriangle
+            className={cn(
+              'h-5 w-5 flex-shrink-0 mt-0.5',
+              stockSummary.expired > 0 ? 'text-rose-600' : 'text-amber-600'
+            )}
+          />
+          <div className="text-sm">
+            <p className="font-semibold">
+              {stockSummary.expired > 0 ? 'Urgent Inventory Notice: Expired Stock Detected' : 'Stock Level Alert'}
+            </p>
+            <p className="mt-1">
+              {stockSummary.expired > 0 && (
+                <span className="font-semibold text-rose-700 dark:text-rose-300">
+                  {stockSummary.expired} medicine record(s) are EXPIRED and must be quarantined immediately.{' '}
+                </span>
+              )}
               {stockSummary.outOfStock > 0 && `${stockSummary.outOfStock} medicine(s) out of stock. `}
-              {stockSummary.lowStock > 0 && `${stockSummary.lowStock} medicine(s) running low. `}
-              Please reorder immediately.
+              {stockSummary.lowStock > 0 && `${stockSummary.lowStock} medicine(s) running below reorder threshold. `}
+              {stockSummary.expiringSoon > 0 && `${stockSummary.expiringSoon} medicine(s) expiring within 30 days.`}
             </p>
           </div>
         </div>
       )}
 
-      {/* Summary Cards - Clickable */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Summary Cards - Clickable 5-Card Layout */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Card
           className={cn(
-            'border-l-4 border-l-green-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'in-stock' && 'ring-2 ring-green-300 bg-green-50/50 dark:bg-green-950/20'
+            'border-l-4 border-l-emerald-500 cursor-pointer transition-all hover:shadow-md',
+            statusFilter === 'in-stock' && 'ring-2 ring-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20'
           )}
           onClick={() => handleCardClick('in-stock')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">In Stock</p>
-                <p className="text-2xl font-bold text-green-600 mt-1">{stockSummary.inStock}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">In Stock</p>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">{stockSummary.inStock}</p>
               </div>
-              <div className="rounded-lg bg-green-50 p-2 dark:bg-green-950/30">
-                <Package className="h-5 w-5 text-green-600" />
+              <div className="rounded-lg bg-emerald-50 p-2 dark:bg-emerald-950/30">
+                <Package className="h-5 w-5 text-emerald-600" />
               </div>
             </div>
           </CardContent>
@@ -488,14 +563,14 @@ export default function MedicineStockComponent() {
         <Card
           className={cn(
             'border-l-4 border-l-amber-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'low-stock' && 'ring-2 ring-amber-300 bg-amber-50/50 dark:bg-amber-950/20'
+            statusFilter === 'low-stock' && 'ring-2 ring-amber-400 bg-amber-50/50 dark:bg-amber-950/20'
           )}
           onClick={() => handleCardClick('low-stock')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Low Stock</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Low Stock</p>
                 <p className="text-2xl font-bold text-amber-600 mt-1">{stockSummary.lowStock}</p>
               </div>
               <div className="rounded-lg bg-amber-50 p-2 dark:bg-amber-950/30">
@@ -508,14 +583,14 @@ export default function MedicineStockComponent() {
         <Card
           className={cn(
             'border-l-4 border-l-red-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'out-of-stock' && 'ring-2 ring-red-300 bg-red-50/50 dark:bg-red-950/20'
+            statusFilter === 'out-of-stock' && 'ring-2 ring-red-400 bg-red-50/50 dark:bg-red-950/20'
           )}
           onClick={() => handleCardClick('out-of-stock')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Out of Stock</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Out of Stock</p>
                 <p className="text-2xl font-bold text-red-600 mt-1">{stockSummary.outOfStock}</p>
               </div>
               <div className="rounded-lg bg-red-50 p-2 dark:bg-red-950/30">
@@ -528,18 +603,38 @@ export default function MedicineStockComponent() {
         <Card
           className={cn(
             'border-l-4 border-l-orange-500 cursor-pointer transition-all hover:shadow-md',
-            statusFilter === 'expiring-soon' && 'ring-2 ring-orange-300 bg-orange-50/50 dark:bg-orange-950/20'
+            statusFilter === 'expiring-soon' && 'ring-2 ring-orange-400 bg-orange-50/50 dark:bg-orange-950/20'
           )}
           onClick={() => handleCardClick('expiring-soon')}
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Expiring Soon</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Expiring Soon</p>
                 <p className="text-2xl font-bold text-orange-600 mt-1">{stockSummary.expiringSoon}</p>
               </div>
               <div className="rounded-lg bg-orange-50 p-2 dark:bg-orange-950/30">
-                <Calendar className="h-5 w-5 text-orange-600" />
+                <Clock className="h-5 w-5 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={cn(
+            'border-l-4 border-l-rose-600 cursor-pointer transition-all hover:shadow-md',
+            statusFilter === 'expired' && 'ring-2 ring-rose-400 bg-rose-50/50 dark:bg-rose-950/20'
+          )}
+          onClick={() => handleCardClick('expired')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Expired</p>
+                <p className="text-2xl font-bold text-rose-600 mt-1">{stockSummary.expired}</p>
+              </div>
+              <div className="rounded-lg bg-rose-50 p-2 dark:bg-rose-950/30">
+                <ShieldAlert className="h-5 w-5 text-rose-600" />
               </div>
             </div>
           </CardContent>
@@ -601,6 +696,7 @@ export default function MedicineStockComponent() {
                 <SelectItem value="low-stock">Low Stock</SelectItem>
                 <SelectItem value="out-of-stock">Out of Stock</SelectItem>
                 <SelectItem value="expiring-soon">Expiring Soon</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -704,9 +800,34 @@ export default function MedicineStockComponent() {
                       </TableCell>
                       <TableCell>
                         {stock.expiry_date ? (
-                          <div className="flex items-center gap-1 text-sm">
-                            <Calendar className="h-3 w-3 text-slate-400" />
-                            {format(new Date(stock.expiry_date), 'MMM yyyy')}
+                          <div className="flex flex-col gap-0.5 text-sm">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                              <span
+                                className={cn(
+                                  status === 'expired' && 'text-rose-600 font-semibold',
+                                  status === 'expiring-soon' && 'text-orange-600 font-medium'
+                                )}
+                              >
+                                {format(new Date(stock.expiry_date), 'dd MMM yyyy')}
+                              </span>
+                            </div>
+                            {status === 'expired' && (
+                              <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                                Expired {(() => {
+                                  const d = getDaysUntilExpiry(stock.expiry_date);
+                                  return d !== null ? `(${Math.abs(d)}d ago)` : '';
+                                })()}
+                              </span>
+                            )}
+                            {status === 'expiring-soon' && (
+                              <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400">
+                                Expiring soon {(() => {
+                                  const d = getDaysUntilExpiry(stock.expiry_date);
+                                  return d !== null ? `(${d === 0 ? 'today' : `${d}d left`})` : '';
+                                })()}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-sm text-slate-400">N/A</span>
@@ -717,9 +838,16 @@ export default function MedicineStockComponent() {
                           variant="outline"
                           className={cn(
                             stockStatusConfig[status].bgColor,
-                            stockStatusConfig[status].color
+                            stockStatusConfig[status].color,
+                            stockStatusConfig[status].borderColor
                           )}
                         >
+                          <span
+                            className={cn(
+                              'h-1.5 w-1.5 rounded-full mr-1.5 inline-block',
+                              stockStatusConfig[status].dotColor
+                            )}
+                          />
                           {stockStatusConfig[status].label}
                         </Badge>
                       </TableCell>
@@ -825,9 +953,16 @@ export default function MedicineStockComponent() {
                     variant="outline"
                     className={cn(
                       stockStatusConfig[getStockStatus(selectedStock)].bgColor,
-                      stockStatusConfig[getStockStatus(selectedStock)].color
+                      stockStatusConfig[getStockStatus(selectedStock)].color,
+                      stockStatusConfig[getStockStatus(selectedStock)].borderColor
                     )}
                   >
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 rounded-full mr-1.5 inline-block',
+                        stockStatusConfig[getStockStatus(selectedStock)].dotColor
+                      )}
+                    />
                     {stockStatusConfig[getStockStatus(selectedStock)].label}
                   </Badge>
                 </div>
@@ -842,9 +977,29 @@ export default function MedicineStockComponent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <span className="text-xs font-medium text-slate-500">Expiry Date</span>
-                    <p className="text-sm">
+                    <p className="text-sm font-medium">
                       {selectedStock.expiry_date
-                        ? format(new Date(selectedStock.expiry_date), 'MMM dd, yyyy')
+                        ? (() => {
+                            const days = getDaysUntilExpiry(selectedStock.expiry_date);
+                            const formatted = format(new Date(selectedStock.expiry_date), 'MMM dd, yyyy');
+                            if (days !== null && days < 0) {
+                              return (
+                                <span className="text-rose-600 font-semibold flex items-center gap-1">
+                                  <ShieldAlert className="h-3.5 w-3.5" />
+                                  {formatted} (Expired {Math.abs(days)}d ago)
+                                </span>
+                              );
+                            }
+                            if (days !== null && days <= 30) {
+                              return (
+                                <span className="text-orange-600 font-medium flex items-center gap-1">
+                                  <Clock className="h-3.5 w-3.5" />
+                                  {formatted} ({days === 0 ? 'Expires today' : `in ${days} days`})
+                                </span>
+                              );
+                            }
+                            return formatted;
+                          })()
                         : 'Not specified'}
                     </p>
                   </div>

@@ -25,6 +25,16 @@ class DiagnosticReportCreateSchema(BaseModel):
 class DiagnosticReportSchema(DiagnosticReportCreateSchema):
     report_id: str
     uploaded_at: Optional[str] = None
+    booking_id: Optional[str] = None
+    test_type: Optional[TestTypeSchema] = None
+    test_name: Optional[str] = None
+    test_category: Optional[str] = None
+    hospital: Optional[dict] = None
+    provider: Optional[dict] = None
+    citizen: Optional[dict] = None
+    issuer_type: Optional[str] = None
+    issuer_name: Optional[str] = None
+    issuer_address: Optional[str] = None
 
     class Config:
         from_attributes = True

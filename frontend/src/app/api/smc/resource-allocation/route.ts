@@ -14,6 +14,9 @@ type ResourceActionPayload = {
   recommendation?: string;
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FALLBACK_OFFICIAL_UUID = "c3000001-0000-0000-0000-000000000001";
+
 function buildTaskEntityId(payload: ResourceActionPayload) {
   return `resource-task:${payload.action ?? "unknown"}:${payload.hospitalId ?? "unknown"}:${
     payload.wardId ?? "na"
@@ -49,6 +52,9 @@ async function createFallbackTaskNotification({
         ? `Resource Review: ${payload.hospitalName}`
         : `Resource Task: ${payload.hospitalName}`,
     message: note,
+    type: "system",
+    priority: "medium",
+    target_type: payload.hospitalId ? "hospital" : "broadcast",
     target_ward_number: payload.wardId ?? null,
     target_hospital_id: payload.hospitalId ?? null,
     related_entity: buildTaskEntityId(payload),
@@ -65,6 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing required resource action fields." }, { status: 400 });
   }
 
+  const creatorUuid = user.id && UUID_REGEX.test(user.id) ? user.id : FALLBACK_OFFICIAL_UUID;
   const note = buildNote(body);
   const priority =
     Number(body.occupancy ?? 0) >= 90 || Number(body.patientLoad ?? 0) >= 15
@@ -80,14 +87,14 @@ export async function POST(request: Request) {
       task_type: body.action === "create_task" ? "redistribution" : "review",
       status: body.action === "create_task" ? "open" : "under_review",
       message: note,
-      created_by: user.id,
-      assigned_official_id: user.officialId ?? null,
+      created_by: creatorUuid,
+      assigned_official_id: user.officialId ?? "SMC-OFF-001",
     });
 
     if (error) {
       const fallbackResult = await createFallbackTaskNotification({
         supabase,
-        userId: user.id,
+        userId: creatorUuid,
         payload: body,
         note,
       });
@@ -126,7 +133,7 @@ export async function POST(request: Request) {
         priority,
         target_type: "user",
         target_user_id: official.user_id,
-        created_by: user.id,
+        created_by: creatorUuid,
       }));
 
     if (hospitalResult.data?.hospital_id) {
@@ -137,7 +144,7 @@ export async function POST(request: Request) {
         priority,
         target_type: "hospital",
         target_hospital_id: body.hospitalId,
-        created_by: user.id,
+        created_by: creatorUuid,
       } as {
         title: string;
         message: string;
@@ -164,4 +171,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ error: "Unsupported resource action." }, { status: 400 });
 }
-

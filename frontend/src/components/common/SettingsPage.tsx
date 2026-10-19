@@ -8,10 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRBAC } from '@/hooks/use-rbac';
 import HospitalDocuments from '@/components/hospital/HospitalDocuments';
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth();
+  const { isAdmin } = useRBAC();
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -224,9 +226,11 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      <div className="mt-8">
-        <HospitalDocuments />
-      </div>
+      {isAdmin && (
+        <div className="mt-8">
+          <HospitalDocuments />
+        </div>
+      )}
     </div>
   );
 }

@@ -21,18 +21,26 @@ type GeoJsonCollection = {
   features: PolygonFeature[];
 };
 
-async function getWardGeoJson() {
-  try {
-    const filePath = path.join(
-      process.cwd(),
-      "Samved_essential_data",
-      "solapur_maps.geojson",
-    );
-    const raw = await readFile(filePath, "utf8");
-    return JSON.parse(raw) as GeoJsonCollection;
-  } catch {
-    return { type: "FeatureCollection", features: [] } as GeoJsonCollection;
+async function getWardGeoJson(): Promise<GeoJsonCollection> {
+  const possiblePaths = [
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "data", "solapur_maps.geojson"),
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "solapur_maps.geojson"),
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "Samved_essential_data", "solapur_maps.geojson"),
+  ];
+
+  for (const filePath of possiblePaths) {
+    try {
+      const raw = await readFile(filePath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.features) && parsed.features.length > 0) {
+        return parsed as GeoJsonCollection;
+      }
+    } catch {
+      // try next path
+    }
   }
+
+  return { type: "FeatureCollection", features: [] } as GeoJsonCollection;
 }
 
 export default async function WardRiskMapPage() {

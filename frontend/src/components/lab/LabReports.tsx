@@ -32,13 +32,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   diagnosticReportService,
   citizenService,
+  hospitalService,
+  getCurrentHospitalId,
   LAB_REPORT_STATUSES,
   type DiagnosticReport,
   type TestType,
   type Citizen,
+  type Hospital,
   type LabReportStatus,
 } from '@/services/database';
 import { storageService } from '@/services/storage';
@@ -62,6 +66,7 @@ import {
   User,
   Phone,
   Activity,
+  Building2,
   XCircle as XCircleIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -132,6 +137,8 @@ const initialFormData: LabReportFormData = {
 };
 
 export default function LabReports() {
+  const { user } = useAuth();
+  const currentHospitalId = user?.hospital_id || getCurrentHospitalId();
   const { getModuleAccess } = useRBAC();
   const moduleAccess = getModuleAccess('lab-reports');
   const canManageReports = moduleAccess === 'full';
@@ -140,6 +147,7 @@ export default function LabReports() {
   // State
   const [reports, setReports] = useState<DiagnosticReport[]>([]);
   const [testTypes, setTestTypes] = useState<TestType[]>([]);
+  const [currentHospital, setCurrentHospital] = useState<Hospital | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<LabReportStatus | 'all'>('all');
@@ -172,9 +180,10 @@ export default function LabReports() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [reportsResult, testTypesResult] = await Promise.all([
-        diagnosticReportService.getAll(),
+      const [reportsResult, testTypesResult, hospitalResult] = await Promise.all([
+        diagnosticReportService.getAll(currentHospitalId),
         diagnosticReportService.getTestTypes(),
+        currentHospitalId ? hospitalService.getById(currentHospitalId) : Promise.resolve({ data: null, error: null }),
       ]);
 
       if (reportsResult.error) {
@@ -190,6 +199,10 @@ export default function LabReports() {
       if (testTypesResult.data) {
         setTestTypes(testTypesResult.data);
       }
+
+      if (hospitalResult?.data) {
+        setCurrentHospital(hospitalResult.data);
+      }
     } catch (error) {
       toast({
         title: 'Error',
@@ -199,7 +212,7 @@ export default function LabReports() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [currentHospitalId, toast]);
 
   useEffect(() => {
     loadData();
@@ -352,6 +365,7 @@ export default function LabReports() {
       const result = await diagnosticReportService.create({
         citizen_id: formData.citizen_id,
         test_type_id: parseInt(formData.test_type_id),
+        hospital_id: currentHospitalId,
         status: formData.status,
         result: formData.result || undefined,
         description: formData.description || undefined,
@@ -561,7 +575,15 @@ export default function LabReports() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Lab Reports</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Lab Reports</h2>
+            {currentHospital && (
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 hidden sm:inline-flex">
+                <Building2 className="h-3 w-3 mr-1" />
+                {currentHospital.name} ({currentHospital.hospital_id})
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Manage patient lab test reports and diagnostics
           </p>
@@ -583,7 +605,7 @@ export default function LabReports() {
       </div>
 
       {/* Stats Cards - Interactive */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {/* All Records Card */}
         <Card 
           className={cn(
@@ -611,9 +633,9 @@ export default function LabReports() {
               key={status.value} 
               className={cn(
                 'p-3 cursor-pointer transition-all hover:shadow-md',
-                statusFilter === status.value ? 'ring-2 ring-[#047857]' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                statusFilter === status.value ? 'ring-2 ring-[#047857] bg-emerald-50/50 dark:bg-emerald-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
               )}
-              onClick={() => setStatusFilter(status.value)}
+              onClick={() => setStatusFilter(prev => prev === status.value ? 'all' : status.value)}
             >
               <div className="flex items-center gap-2">
                 <div className={cn('p-2 rounded-lg', config?.bgColor || 'bg-slate-100 dark:bg-slate-800')}>
@@ -739,27 +761,24 @@ export default function LabReports() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          {report.report_file_url ? (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => openViewDialog(report)}
-                                title="View Report Details"
-                                className="hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                              >
-                                <Eye className="h-4 w-4 text-emerald-600" />
-                              </Button>
-                            </>
-                          ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openViewDialog(report)}
+                            title="View Report Details"
+                            className="hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {report.report_file_url && (
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => openViewDialog(report)}
-                              title="View Report Details"
-                              className="hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                              onClick={() => handleDownloadFile(report)}
+                              title="Download Report File"
+                              className="hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-600"
                             >
-                              <Eye className="h-4 w-4 text-emerald-600" />
+                              <Download className="h-4 w-4" />
                             </Button>
                           )}
                           {canManageReports ? (
@@ -770,10 +789,10 @@ export default function LabReports() {
                               disabled={report.status === 'completed'}
                               title={report.status === 'completed' ? 'Completed reports cannot be edited' : 'Edit Report'}
                               className={cn(
-                                report.status === 'completed' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-50 dark:hover:bg-amber-900/30'
+                                report.status === 'completed' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-500'
                               )}
                             >
-                              <Edit className="h-4 w-4 text-amber-500" />
+                              <Edit className="h-4 w-4" />
                             </Button>
                           ) : null}
                         </div>
@@ -1290,19 +1309,19 @@ export default function LabReports() {
           {viewingReport && (
             <ScrollArea className="max-h-[70vh] pr-4">
               <div className="space-y-4">
-                <div className="rounded-xl border bg-slate-50 p-5 space-y-4">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 p-5 space-y-4">
                   <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
+                    <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     Test Information
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div>
                       <p className="text-slate-500 dark:text-slate-400">Test Name:</p>
-                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.test_type?.test_name || 'N/A'}</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.test_type?.test_name || viewingReport.test_name || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-slate-500 dark:text-slate-400">Test Category:</p>
-                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.test_type?.test_category || 'N/A'}</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.test_type?.test_category || viewingReport.test_category || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-slate-500 dark:text-slate-400">Test Date:</p>
@@ -1327,9 +1346,9 @@ export default function LabReports() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border bg-slate-50 p-5 space-y-4">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 p-5 space-y-4">
                   <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                    <User className="h-4 w-4" />
+                    <User className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     Patient Information
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -1338,28 +1357,66 @@ export default function LabReports() {
                       <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.citizen?.name || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500 dark:text-slate-400">Patient ID:</p>
-                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.citizen_id || 'N/A'}</p>
+                      <p className="text-slate-500 dark:text-slate-400">Citizen UID (SMC-ID):</p>
+                      <p className="font-mono font-semibold text-slate-800 dark:text-white">{viewingReport.citizen_id || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Phone Number:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">{viewingReport.citizen?.phone || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Gender / Age:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white capitalize">
+                        {viewingReport.citizen?.gender || 'N/A'}{viewingReport.citizen?.age ? ` (${viewingReport.citizen.age} yrs)` : ''}
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-xl border bg-slate-50 p-5 space-y-4">
+                {/* Facility & Issuer Info */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 p-5 space-y-4">
                   <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Results
+                    <Building2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Diagnostic Facility & Issuer Information
                   </h4>
-                  <div className="space-y-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-slate-500 dark:text-slate-400">Result:</p>
-                      <p className="font-medium text-slate-800 dark:text-white whitespace-pre-wrap">
-                        {viewingReport.result || 'N/A'}
+                      <p className="text-slate-500 dark:text-slate-400">Facility Type:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">
+                        {viewingReport.issuer_type || (viewingReport.hospital_id ? 'Hospital' : viewingReport.provider_id ? 'Diagnostic Laboratory' : 'Health Facility')}
                       </p>
                     </div>
                     <div>
-                      <p className="text-slate-500 dark:text-slate-400">Description:</p>
+                      <p className="text-slate-500 dark:text-slate-400">Facility / Issuer Name:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">
+                        {viewingReport.issuer_name || viewingReport.hospital?.name || viewingReport.provider?.name || currentHospital?.name || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-slate-500 dark:text-slate-400">Facility Address:</p>
+                      <p className="font-semibold text-slate-800 dark:text-white">
+                        {viewingReport.issuer_address || viewingReport.hospital?.address || viewingReport.provider?.address || currentHospital?.address || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 p-5 space-y-4">
+                  <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Results & Notes
+                  </h4>
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Result Summary:</p>
                       <p className="font-medium text-slate-800 dark:text-white whitespace-pre-wrap">
-                        {viewingReport.description || 'N/A'}
+                        {viewingReport.result || 'No clinical results recorded'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 dark:text-slate-400">Description / Observations:</p>
+                      <p className="font-medium text-slate-800 dark:text-white whitespace-pre-wrap">
+                        {viewingReport.description || 'No additional observations recorded'}
                       </p>
                     </div>
                   </div>

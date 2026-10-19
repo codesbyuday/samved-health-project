@@ -64,13 +64,23 @@ export function getStatusTone(value: string | boolean | null | undefined) {
   }
 
   if (
+    normalized.includes("no data") ||
+    normalized.includes("no_data") ||
+    normalized.includes("unknown") ||
+    normalized.includes("unassigned")
+  ) {
+    return "text-slate-600 bg-slate-100 border-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700";
+  }
+
+  if (
     normalized.includes("resolved") ||
     normalized.includes("verified") ||
     normalized.includes("active") ||
     normalized.includes("healthy") ||
     normalized.includes("complete") ||
     normalized.includes("sent") ||
-    normalized.includes("approved")
+    normalized.includes("approved") ||
+    normalized.includes("compliant")
   ) {
     return "text-green-700 bg-green-50 border-green-200 dark:text-green-200 dark:bg-green-950/40 dark:border-green-900";
   }

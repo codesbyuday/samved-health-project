@@ -15,29 +15,104 @@ DISEASE_NAME_MAP = {
   "DIS00007": "Hepatitis A",
 }
 
-HOSPITAL_NAME_MAP = {
-  "HOSP001": "Surat Civil Hospital",
-  "HOSP002": "SMIMER Hospital",
-  "HOSP003": "New Civil Hospital",
-  "HOSP004": "SMC Urban Health Center",
-}
-
 
 class DiseaseSurveillanceService:
-    async def get_cases(self, ward_number: Optional[int] = None, hospital_id: Optional[str] = None) -> List[dict]:
+    async def get_cases(
+        self,
+        ward_number: Optional[int] = None,
+        hospital_id: Optional[str] = None,
+        citizen_id: Optional[str] = None,
+    ) -> List[dict]:
         query = {"order": "report_date.desc"}
         if ward_number:
             query["ward_number"] = f"eq.{ward_number}"
         if hospital_id:
             query["hospital_id"] = f"eq.{hospital_id}"
+        if citizen_id:
+            query["citizen_id"] = f"eq.{citizen_id}"
 
-        cases = await supabase_http_client.select("disease_cases", query)
+        cases_task = supabase_http_client.select("disease_cases", query)
+        diseases_task = self.get_diseases()
+        hospitals_task = supabase_http_client.select("hospitals", {"limit": "200"})
+        staff_task = supabase_http_client.select("hospital_staff", {"limit": "500"})
+
+        cases_raw, diseases_raw, hospitals_raw, staff_raw = await asyncio.gather(
+            cases_task, diseases_task, hospitals_task, staff_task, return_exceptions=True
+        )
+
+        cases = cases_raw if isinstance(cases_raw, list) else []
+        diseases = diseases_raw if isinstance(diseases_raw, list) else []
+        hospitals = hospitals_raw if isinstance(hospitals_raw, list) else []
+        staff_list = staff_raw if isinstance(staff_raw, list) else []
+
+        disease_dict = {
+            d["disease_id"]: d
+            for d in diseases
+            if isinstance(d, dict) and "disease_id" in d
+        }
+        hospital_dict = {
+            h["hospital_id"]: h
+            for h in hospitals
+            if isinstance(h, dict) and "hospital_id" in h
+        }
+        staff_dict = {}
+        for s in staff_list:
+            if isinstance(s, dict):
+                if s.get("staff_uuid"):
+                    staff_dict[str(s["staff_uuid"])] = s
+                if s.get("user_id"):
+                    staff_dict[str(s["user_id"])] = s
+                if s.get("staff_id"):
+                    staff_dict[str(s["staff_id"])] = s
 
         for c in cases:
             d_id = c.get("disease_id")
             h_id = c.get("hospital_id")
-            c["disease_name"] = DISEASE_NAME_MAP.get(d_id, d_id or "Dengue Fever")
-            c["hospital_name"] = HOSPITAL_NAME_MAP.get(h_id, h_id or "Civil Hospital")
+            s_uuid = c.get("reported_by")
+
+            d_info = disease_dict.get(d_id)
+            if d_info:
+                c["disease"] = d_info
+                c["disease_name"] = d_info.get("disease_name")
+                c["disease_type"] = d_info.get("disease_type")
+                c["disease_category"] = d_info.get("disease_category")
+            else:
+                fallback_name = DISEASE_NAME_MAP.get(d_id, "Infectious Condition")
+                c["disease"] = {
+                    "disease_id": d_id or "DIS-UNKNOWN",
+                    "disease_name": fallback_name,
+                    "disease_type": "Communicable",
+                    "disease_category": "General",
+                    "is_notifiable": True,
+                }
+                c["disease_name"] = fallback_name
+                c["disease_type"] = "Communicable"
+                c["disease_category"] = "General"
+
+            h_info = hospital_dict.get(h_id)
+            if h_info:
+                c["hospital"] = h_info
+                c["hospital_name"] = h_info.get("name")
+                c["hospital_address"] = h_info.get("address")
+            else:
+                c["hospital"] = None
+                c["hospital_name"] = "N/A"
+                c["hospital_address"] = "N/A"
+
+            s_info = staff_dict.get(str(s_uuid)) if s_uuid else None
+            if s_info:
+                c["reported_by_staff"] = s_info
+                c["doctor_name"] = s_info.get("name")
+                c["department"] = s_info.get("department")
+                c["designation"] = s_info.get("designation")
+            else:
+                c["reported_by_staff"] = None
+                c["doctor_name"] = None
+                c["department"] = None
+                c["designation"] = None
+
+            if not c.get("ward_number") and h_info and h_info.get("ward_id"):
+                c["ward_number"] = h_info.get("ward_id")
 
         return cases
 
@@ -89,15 +164,12 @@ class DiseaseSurveillanceService:
 
         hospital_map = {
             h["hospital_id"]: {
-                "name": h.get("name") or HOSPITAL_NAME_MAP.get(h["hospital_id"], "Surat Hospital"),
+                "name": h.get("name") or "Hospital",
                 "ward_id": h.get("ward_id") or 1,
             }
             for h in hospitals
-            if "hospital_id" in h
+            if isinstance(h, dict) and "hospital_id" in h
         }
-        for h_id, h_name in HOSPITAL_NAME_MAP.items():
-            if h_id not in hospital_map:
-                hospital_map[h_id] = {"name": h_name, "ward_id": 1}
 
         ward_map = {w["ward_id"]: w.get("ward_name") or f"Ward {w['ward_id']}" for w in wards_list if "ward_id" in w}
 

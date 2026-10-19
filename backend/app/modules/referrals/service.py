@@ -9,6 +9,8 @@ from app.modules.referrals.schemas import ReferralCreateSchema, ReferralStatusUp
 class ReferralService:
     async def get_all(self, hospital_id: Optional[str] = None) -> List[dict]:
         query = {"order": "created_at.desc"}
+        if hospital_id:
+            query["or"] = f"(from_hospital_id.eq.{hospital_id},to_hospital_id.eq.{hospital_id})"
         
         apts_task = supabase_http_client.select("referrals", query)
         citizens_task = supabase_http_client.select("citizens")
@@ -33,6 +35,7 @@ class ReferralService:
             fh_id = r.get("from_hospital_id")
             th_id = r.get("to_hospital_id")
             rd_id = r.get("referring_doctor_id")
+            td_id = r.get("to_doctor_id")
 
             if cz_id:
                 r["citizen"] = citizen_map.get(cz_id)
@@ -42,52 +45,30 @@ class ReferralService:
                 r["to_hospital"] = hospital_map.get(th_id)
             if rd_id:
                 r["referring_doctor"] = staff_map.get(rd_id)
-
-        if not rows:
-            # Fallback rich initial records for referral management portal
-            rows = [
-                {
-                    "referral_id": "REF-001",
-                    "citizen_id": "SMC-2026-000102",
-                    "from_hospital_id": "HOSP001",
-                    "to_hospital_id": "HOSP002",
-                    "urgency_level": "high",
-                    "status": "pending",
-                    "referral_reason": "Advanced Cardiology Workup & MRI required",
-                    "notes": "Patient experiencing recurring angina pectoris",
-                    "created_at": datetime.now().isoformat(),
-                    "citizen": {"name": "Ramesh Kumar Sharma", "phone": "9876543210", "gender": "Male", "age": 48},
-                    "from_hospital": {"name": "Surat Civil Hospital"},
-                    "to_hospital": {"name": "SMIMER Hospital"},
-                },
-                {
-                    "referral_id": "REF-002",
-                    "citizen_id": "SMC-2026-000105",
-                    "from_hospital_id": "HOSP003",
-                    "to_hospital_id": "HOSP001",
-                    "urgency_level": "critical",
-                    "status": "accepted",
-                    "referral_reason": "Emergency ICU & Mechanical Ventilator Support",
-                    "notes": "Severe Respiratory Distress Syndrome",
-                    "created_at": datetime.now().isoformat(),
-                    "citizen": {"name": "Priya Rajesh Verma", "phone": "9123456789", "gender": "Female", "age": 34},
-                    "from_hospital": {"name": "New Civil Hospital"},
-                    "to_hospital": {"name": "Surat Civil Hospital"},
-                },
-            ]
+            if td_id:
+                r["to_doctor"] = staff_map.get(td_id)
 
         return rows
 
     async def create(self, payload: ReferralCreateSchema) -> dict:
         data = payload.model_dump(exclude_unset=True, mode="json")
-        data["referral_id"] = f"REF-{uuid.uuid4().hex[:8].upper()}"
+        if not data.get("referral_id"):
+            data["referral_id"] = str(uuid.uuid4())
         data["status"] = "pending"
+        data["created_at"] = datetime.now().isoformat()
+        data["updated_at"] = datetime.now().isoformat()
         res = await supabase_http_client.insert("referrals", data)
         return res[0] if res else data
 
-    async def update_status(self, referral_id: str, status_val: str) -> dict:
-        res = await supabase_http_client.update("referrals", {"referral_id": f"eq.{referral_id}"}, {"status": status_val})
-        return res[0] if res else {"referral_id": referral_id, "status": status_val}
+    async def update_status(self, referral_id: str, status_val: str, notes: Optional[str] = None) -> dict:
+        update_data = {
+            "status": status_val,
+            "updated_at": datetime.now().isoformat()
+        }
+        if notes:
+            update_data["notes"] = notes
+        res = await supabase_http_client.update("referrals", {"referral_id": f"eq.{referral_id}"}, update_data)
+        return res[0] if res else {"referral_id": referral_id, **update_data}
 
 
 referral_service = ReferralService()

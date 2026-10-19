@@ -26,10 +26,6 @@ interface Notification {
   read: boolean;
 }
 
-interface NotificationsPanelProps {
-  className?: string;
-}
-
 const getNotificationIcon = (type: string) => {
   switch (type) {
     case 'alert':
@@ -56,13 +52,18 @@ const getNotificationBg = (type: string) => {
   }
 };
 
-export default function NotificationsPanel({ className }: NotificationsPanelProps) {
+interface NotificationsPanelProps {
+  className?: string;
+  hospitalId?: string;
+}
+
+export default function NotificationsPanel({ className, hospitalId }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadAlerts() {
     setLoading(true);
-    const { data } = await dashboardService.getDynamicAlerts();
+    const { data } = await dashboardService.getDynamicAlerts(hospitalId);
     if (data) {
       setNotifications(data);
     }
@@ -75,7 +76,7 @@ export default function NotificationsPanel({ className }: NotificationsPanelProp
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [hospitalId]);
 
   const unreadNotifications = notifications.filter((n) => !n.read);
 

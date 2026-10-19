@@ -12,6 +12,9 @@ type ComplianceAlertPayload = {
   lastUpdatedAt?: string | null;
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FALLBACK_OFFICIAL_UUID = "c3000001-0000-0000-0000-000000000001"; // SMC-OFF-001 in smc_officials
+
 export async function POST(request: Request) {
   const user = await requireUserContext("/smc/data-compliance");
   const body = (await request.json()) as ComplianceAlertPayload;
@@ -28,6 +31,8 @@ export async function POST(request: Request) {
 
   const message = `${body.hospitalName} in ${body.wardName ?? "the assigned ward"} has not updated operational data on time. Last known update: ${formatDate(body.lastUpdatedAt, "dd MMM yyyy, p")}. Please update bed and medicine stock records immediately.`;
 
+  const creatorUuid = user.id && UUID_REGEX.test(user.id) ? user.id : FALLBACK_OFFICIAL_UUID;
+
   const { error } = await supabase.from("notifications").insert({
     title: `Compliance Reminder: ${body.hospitalName}`,
     message,
@@ -36,7 +41,7 @@ export async function POST(request: Request) {
     target_type: "hospital",
     target_hospital_id: body.hospitalId,
     related_entity: `compliance-alert:${body.hospitalId}`,
-    created_by: user.id,
+    created_by: creatorUuid,
   });
 
   if (error) {
@@ -45,4 +50,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, message: "Compliance reminder sent to hospital." });
 }
-

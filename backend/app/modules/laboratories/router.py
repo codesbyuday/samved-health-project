@@ -30,3 +30,8 @@ async def get_report_file(report_id: str):
     if not file_url:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report file not found")
     return {"report_id": report_id, "file_url": file_url}
+
+
+@router.patch("/reports/{report_id}")
+async def update_diagnostic_report(report_id: str, payload: dict):
+    return await laboratory_service.update_report(report_id, payload)

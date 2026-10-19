@@ -135,6 +135,33 @@ export const storageService = {
       };
 
       if (!response.ok || !result.success || !result.url) {
+        // Direct Supabase storage fallback
+        try {
+          const { data: report } = await supabase
+            .from('diagnostic_reports')
+            .select('report_file_url')
+            .eq('report_id', reportId)
+            .maybeSingle();
+
+          if (report?.report_file_url) {
+            const fileUrl = report.report_file_url;
+            const fileName = fileUrl.split('/').pop() || 'lab-report';
+            if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+              return { url: fileUrl, fileName, error: null };
+            }
+            const { data: signed } = await supabase.storage
+              .from('lab_reports')
+              .createSignedUrl(fileUrl, SIGNED_URL_EXPIRY, {
+                download: action === 'download' ? fileName : false,
+              });
+            if (signed?.signedUrl) {
+              return { url: signed.signedUrl, fileName, error: null };
+            }
+          }
+        } catch {
+          // fallback failed, return original error
+        }
+
         return {
           url: null,
           fileName: null,

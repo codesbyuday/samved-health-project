@@ -26,11 +26,9 @@ export async function PATCH(
       .update({ status: "resolved" })
       .eq("task_id", taskId);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!error) {
+      return NextResponse.json({ ok: true, message: "Task resolved." });
     }
-
-    return NextResponse.json({ ok: true, message: "Task resolved." });
   }
 
   const { error } = await supabase

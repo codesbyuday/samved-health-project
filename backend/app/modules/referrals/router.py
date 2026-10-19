@@ -18,4 +18,4 @@ async def create_referral(payload: ReferralCreateSchema):
 
 @router.patch("/{referral_id}")
 async def update_referral_status(referral_id: str, payload: ReferralStatusUpdateSchema):
-    return await referral_service.update_status(referral_id, payload.status)
+    return await referral_service.update_status(referral_id, payload.status, payload.notes)

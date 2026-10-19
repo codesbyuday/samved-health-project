@@ -39,13 +39,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function PatientVisitsChart() {
+export function PatientVisitsChart({ hospitalId }: { hospitalId?: string } = {}) {
   const [data, setData] = useState<{ date: string; patients: number; emergencies: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadData() {
     setLoading(true);
-    const { data: result } = await dashboardService.getPatientVisitsData();
+    const { data: result } = await dashboardService.getPatientVisitsData(hospitalId);
     if (result) {
       setData(result);
     }
@@ -58,7 +58,7 @@ export function PatientVisitsChart() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [hospitalId]);
 
   if (loading) {
     return (
@@ -144,13 +144,13 @@ const BarTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function DiseaseTrendsChart() {
+export function DiseaseTrendsChart({ hospitalId }: { hospitalId?: string } = {}) {
   const [data, setData] = useState<{ name: string; cases: number; trend: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadData() {
     setLoading(true);
-    const { data: result } = await dashboardService.getDiseaseTrends();
+    const { data: result } = await dashboardService.getDiseaseTrends(hospitalId);
     if (result) {
       setData(result);
     }
@@ -163,7 +163,7 @@ export function DiseaseTrendsChart() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [hospitalId]);
 
   if (loading) {
     return (
@@ -244,7 +244,7 @@ const PieTooltip = ({ active, payload }: any) => {
   return null;
 };
 
-export function BedOccupancyChart() {
+export function BedOccupancyChart({ hospitalId }: { hospitalId?: string } = {}) {
   const [data, setData] = useState<{
     general: { total: number; occupied: number; available: number; percentage: number };
     icu: { total: number; occupied: number; available: number; percentage: number };
@@ -254,7 +254,7 @@ export function BedOccupancyChart() {
 
   async function loadData() {
     setLoading(true);
-    const { data: result } = await dashboardService.getBedOccupancyData();
+    const { data: result } = await dashboardService.getBedOccupancyData(hospitalId);
     if (result) {
       setData(result);
     }
@@ -267,7 +267,7 @@ export function BedOccupancyChart() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [hospitalId]);
 
   if (loading) {
     return (

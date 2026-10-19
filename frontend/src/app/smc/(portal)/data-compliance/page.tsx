@@ -30,7 +30,7 @@ export default async function DataCompliancePage({
         description="Identify hospitals that are not updating operational data on time based on the latest bed and medicine stock timestamps."
       />
 
-      <form className="surface grid gap-4 p-5 md:grid-cols-3">
+      <form action="/smc/data-compliance" method="GET" className="surface grid gap-4 p-5 md:grid-cols-3">
         <label className="space-y-2">
           <span className="text-sm font-medium">Ward</span>
           <select
@@ -60,10 +60,18 @@ export default async function DataCompliancePage({
             <option value="compliant">Compliant</option>
           </select>
         </label>
-        <div className="flex items-end">
-          <button className="rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground">
+        <div className="flex items-end gap-2">
+          <button type="submit" className="rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             Apply filters
           </button>
+          {(data.filters.ward !== "all" || data.filters.status !== "all") && (
+            <a
+              href="/smc/data-compliance"
+              className="rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+            >
+              Reset
+            </a>
+          )}
         </div>
       </form>
 
@@ -113,27 +121,43 @@ export default async function DataCompliancePage({
           { key: "lastAlert", label: "Last Reminder" },
           { key: "action", label: "Action" },
         ]}
-        rows={(data.rows || []).map((row) => ({
-          id: row.hospitalId,
-          hospital: row.name,
-          ward: row.wardName,
-          updated: formatDate(row.lastUpdatedAt, "dd MMM yyyy, p"),
-          staleHours: (row as any).staleHours ?? (row as any).hoursSinceUpdate ?? "No data",
-          status: <StatusBadge value={row.status} />,
-          lastAlert: row.lastAlertSentAt
-            ? formatDate(row.lastAlertSentAt, "dd MMM yyyy, p")
-            : "No reminder sent",
-          action: (
-            <ComplianceAlertButton
-              hospitalId={row.hospitalId}
-              hospitalName={row.name}
-              wardName={row.wardName}
-              complianceStatus={row.complianceStatus}
-              lastUpdatedAt={row.lastUpdatedAt}
-              disabled={row.complianceStatus === "compliant"}
-            />
-          ),
-        }))}
+        rows={(data.rows || []).map((row) => {
+          let staleDisplay = "No update recorded";
+          if (row.hoursSinceUpdate !== null && row.hoursSinceUpdate !== undefined) {
+            if (row.hoursSinceUpdate < 1) {
+              staleDisplay = "< 1 hr";
+            } else if (row.hoursSinceUpdate < 24) {
+              staleDisplay = `${Math.round(row.hoursSinceUpdate)} hrs`;
+            } else {
+              const days = (row.hoursSinceUpdate / 24).toFixed(1);
+              staleDisplay = `${Math.round(row.hoursSinceUpdate)} hrs (${days}d)`;
+            }
+          }
+
+          return {
+            id: row.hospitalId,
+            hospital: row.name,
+            ward: row.wardName,
+            updated: row.lastUpdatedAt
+              ? formatDate(row.lastUpdatedAt, "dd MMM yyyy, p")
+              : "Never updated",
+            staleHours: staleDisplay,
+            status: <StatusBadge value={row.complianceStatus} mode="status" />,
+            lastAlert: row.lastAlertSentAt
+              ? formatDate(row.lastAlertSentAt, "dd MMM yyyy, p")
+              : "No reminder sent",
+            action: (
+              <ComplianceAlertButton
+                hospitalId={row.hospitalId}
+                hospitalName={row.name}
+                wardName={row.wardName}
+                complianceStatus={row.complianceStatus}
+                lastUpdatedAt={row.lastUpdatedAt}
+                disabled={row.complianceStatus.toLowerCase() === "compliant"}
+              />
+            ),
+          };
+        })}
         emptyMessage="No hospitals matched the selected compliance filters."
       />
     </div>

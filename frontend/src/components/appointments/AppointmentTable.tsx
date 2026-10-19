@@ -33,12 +33,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   appointmentService,
   citizenService,
   doctorService,
   hospitalService,
   hospitalWardService,
+  getCurrentHospitalId,
   DEPARTMENTS,
   TIME_SLOTS,
   type Appointment,
@@ -68,6 +70,10 @@ import {
   Eye,
   FileText,
   Printer,
+  AlertCircle,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 import { format, isToday, isFuture, parseISO, startOfToday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -90,14 +96,15 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AppointmentTable() {
+  const { user } = useAuth();
+  const currentHospitalId = user?.hospital_id || getCurrentHospitalId();
   const { getModuleAccess } = useRBAC();
   const moduleAccess = getModuleAccess('appointments');
   const canManageAppointments = moduleAccess === 'full';
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [hospitals, setHospitals] = useState<Hospital[]>([]);
-  const [wards, setWards] = useState<HospitalWard[]>([]);
+  const [currentHospital, setCurrentHospital] = useState<Hospital | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,88 +120,171 @@ export default function AppointmentTable() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [printingAppointmentId, setPrintingAppointmentId] = useState<string | null>(null);
 
-  // New appointment form state
-  const [newAppointment, setNewAppointment] = useState({
-    citizen_id: '',
-    doctor_id: '',
-    hospital_id: '',
-    department: '',
-    appointment_date: '',
-    time_slot: '',
-    appointment_type: 'in_person',
-    citizenSearch: '',
-  });
-  const [searchedCitizens, setSearchedCitizens] = useState<Citizen[]>([]);
-  const [isSearchingCitizens, setIsSearchingCitizens] = useState(false);
-  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // New appointment ID verification state
+  const [idType, setIdType] = useState<'health_id' | 'aadhar_id' | 'phone'>('health_id');
+  const [idInput, setIdInput] = useState('');
+  const [isVerifyingCitizen, setIsVerifyingCitizen] = useState(false);
+  const [verifiedCitizen, setVerifiedCitizen] = useState<(Citizen & { ward?: any; age?: number }) | null>(null);
+  const [isCitizenConfirmed, setIsCitizenConfirmed] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
 
-  // Load data on mount
-  useEffect(() => {
-    loadData();
-  }, []);
+  // New appointment booking details
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('not_decided');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
+  const [appointmentDate, setAppointmentDate] = useState<string>('');
+  const [timeSlot, setTimeSlot] = useState<string>('');
+  const [appointmentType, setAppointmentType] = useState<string>('in_person');
+  const [bookingErrors, setBookingErrors] = useState<Record<string, string>>({});
 
-  const loadData = async (showLoading = true) => {
+  // Load data on mount / hospital change
+  const loadData = useCallback(async (showLoading = true) => {
     if (showLoading && appointments.length === 0) {
       setIsLoading(true);
     }
-    const [aptResult, docResult, hospResult, wardResult] = await Promise.all([
-      appointmentService.getAll(),
-      doctorService.getAll(),
-      hospitalService.getAll(),
-      hospitalWardService.getAll(),
+    const [aptResult, docResult, hospResult] = await Promise.all([
+      appointmentService.getAll(currentHospitalId),
+      doctorService.getAll(currentHospitalId),
+      currentHospitalId ? hospitalService.getById(currentHospitalId) : Promise.resolve({ data: null, error: null }),
     ]);
     
     if (aptResult.data) setAppointments(aptResult.data);
     if (docResult.data) setDoctors(docResult.data);
-    if (hospResult.data) setHospitals(hospResult.data);
-    if (wardResult.data) setWards(wardResult.data);
+    if (hospResult?.data) setCurrentHospital(hospResult.data);
     setIsLoading(false);
+  }, [currentHospitalId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Available departments for booking: union of doctors' departments + standard hospital specialties
+  const availableBookingDepartments = useMemo(() => {
+    const depts = new Set<string>();
+    doctors.forEach(d => {
+      const dept = d.department || d.specialization;
+      if (dept && dept !== 'General') depts.add(dept);
+    });
+    ['General Medicine', 'Gynecology', 'Neurology', 'Endocrinology', 'Cardiology', 'Pediatrics', 'Orthopedics', 'Dermatology'].forEach(d => depts.add(d));
+    return Array.from(depts).sort();
+  }, [doctors]);
+
+  // Filter available doctors for the modal:
+  // If 'not_decided' is selected, show ALL doctors associated with the current hospital!
+  // If a specific department is selected, filter doctors by that department.
+  const availableDoctors = useMemo(() => {
+    if (selectedDepartment === 'not_decided') {
+      return doctors;
+    }
+    return doctors.filter(d =>
+      (d.department || '').toLowerCase() === selectedDepartment.toLowerCase() ||
+      (d.specialization || '').toLowerCase() === selectedDepartment.toLowerCase()
+    );
+  }, [doctors, selectedDepartment]);
+
+  // Handle department change in booking modal
+  const handleDepartmentChange = (dept: string) => {
+    setSelectedDepartment(dept);
+    if (dept !== 'not_decided') {
+      const docMatches = doctors.find(d => d.staff_uuid === selectedDoctorId && (
+        (d.department || '').toLowerCase() === dept.toLowerCase() ||
+        (d.specialization || '').toLowerCase() === dept.toLowerCase()
+      ));
+      if (!docMatches) {
+        setSelectedDoctorId('');
+      }
+    }
   };
 
-  // Filter doctors by department
-  useEffect(() => {
-    if (newAppointment.department) {
-      const filtered = doctors.filter(d => d.specialization === newAppointment.department);
-      setFilteredDoctors(filtered);
-      setNewAppointment(prev => ({ ...prev, doctor_id: '' }));
-    } else {
-      setFilteredDoctors([]);
-    }
-  }, [newAppointment.department, doctors]);
-
-  // Search citizens
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (newAppointment.citizenSearch.trim()) {
-        setIsSearchingCitizens(true);
-        const { data } = await citizenService.search(newAppointment.citizenSearch.trim());
-        setSearchedCitizens(data || []);
-        setIsSearchingCitizens(false);
-      } else {
-        setSearchedCitizens([]);
+  // Handle doctor change in booking modal
+  const handleDoctorChange = (docId: string) => {
+    setSelectedDoctorId(docId);
+    if (selectedDepartment === 'not_decided') {
+      const doc = doctors.find(d => d.staff_uuid === docId);
+      if (doc?.department) {
+        setSelectedDepartment(doc.department);
       }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [newAppointment.citizenSearch]);
+    }
+    if (bookingErrors.doctor_id) {
+      setBookingErrors(prev => ({ ...prev, doctor_id: '' }));
+    }
+  };
+
+  // Verify Citizen by Health ID, Aadhaar ID, or Phone
+  const handleVerifyCitizen = async () => {
+    const clean = idInput.trim();
+    if (!clean) {
+      setVerificationError(
+        `Please enter a valid ${
+          idType === 'health_id' ? 'Health ID (SMC-ID)' : idType === 'aadhar_id' ? 'Aadhaar ID' : 'Phone Number'
+        }`
+      );
+      return;
+    }
+    setVerificationError('');
+    setIsVerifyingCitizen(true);
+    try {
+      const res = await citizenService.verifyCitizen(idType, clean);
+      if (res.error || !res.data) {
+        setVerificationError(res.error || 'Citizen not found in system. Please verify the ID and try again.');
+        setVerifiedCitizen(null);
+        setIsCitizenConfirmed(false);
+      } else {
+        setVerifiedCitizen(res.data);
+        setIsCitizenConfirmed(false);
+        setVerificationError('');
+      }
+    } catch (err) {
+      setVerificationError('Error checking citizen identity. Please try again.');
+    } finally {
+      setIsVerifyingCitizen(false);
+    }
+  };
+
+  // Reset booking modal state
+  const resetBookingForm = () => {
+    setIdType('health_id');
+    setIdInput('');
+    setVerifiedCitizen(null);
+    setIsCitizenConfirmed(false);
+    setVerificationError('');
+    setSelectedDepartment('not_decided');
+    setSelectedDoctorId('');
+    setAppointmentDate('');
+    setTimeSlot('');
+    setAppointmentType('in_person');
+    setBookingErrors({});
+  };
+
+  // Get unique departments for table filter
+  const uniqueDepartments = useMemo(() => {
+    const depts = new Set<string>();
+    appointments.forEach(apt => {
+      const dept = apt.doctor?.department || apt.doctor?.specialization;
+      if (dept && dept !== 'General') depts.add(dept);
+    });
+    doctors.forEach(doc => {
+      const dept = doc.department || doc.specialization;
+      if (dept && dept !== 'General') depts.add(dept);
+    });
+    return Array.from(depts).sort();
+  }, [appointments, doctors]);
 
   const filteredAppointments = useMemo(() => {
     return appointments.filter((apt) => {
       const citizenName = apt.citizen?.name || '';
       const citizenId = apt.citizen?.citizen_id || '';
       const doctorName = apt.doctor?.name || '';
-      const wardName = apt.hospital_ward?.ward_name || '';
+      const deptName = apt.doctor?.department || apt.doctor?.specialization || '';
       
       const matchesSearch =
         citizenName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         citizenId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         doctorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        wardName.toLowerCase().includes(searchQuery.toLowerCase());
+        deptName.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === 'all' || apt.status === statusFilter;
       const matchesDepartment =
         departmentFilter === 'all' || 
-        apt.hospital_ward?.ward_name === departmentFilter ||
-        apt.doctor?.specialization === departmentFilter;
+        deptName.toLowerCase() === departmentFilter.toLowerCase();
       return matchesSearch && matchesStatus && matchesDepartment;
     });
   }, [appointments, searchQuery, statusFilter, departmentFilter]);
@@ -251,18 +341,13 @@ export default function AppointmentTable() {
       setPrintingAppointmentId(apt.appointment_id);
       toast.info('Generating appointment slip...');
       
-      // Call the API to generate PDF
       const response = await fetch(`/api/appointments/slip?appointment_id=${apt.appointment_id}`);
-      
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to generate PDF');
       }
       
-      // Get the PDF blob
       const blob = await response.blob();
-      
-      // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -296,62 +381,58 @@ export default function AppointmentTable() {
   // Get minimum date (today)
   const minDate = format(startOfToday(), 'yyyy-MM-dd');
 
-  // Validate new appointment form
-  const validateNewAppointment = (): boolean => {
-    const errors: Record<string, string> = {};
-    if (!newAppointment.citizen_id) errors.citizen_id = 'Please select a citizen';
-    if (!newAppointment.department) errors.department = 'Please select a department';
-    if (!newAppointment.doctor_id) errors.doctor_id = 'Please select a doctor';
-    if (!newAppointment.hospital_id) errors.hospital_id = 'Please select a hospital';
-    if (!newAppointment.appointment_date) errors.appointment_date = 'Please select a date';
-    if (!newAppointment.time_slot) errors.time_slot = 'Please select a time slot';
-    
-    // Validate date is not in the past
-    if (newAppointment.appointment_date) {
-      const selectedDate = parseISO(newAppointment.appointment_date);
-      if (!isToday(selectedDate) && !isFuture(selectedDate)) {
-        errors.appointment_date = 'Please select today or a future date';
-      }
-    }
-    
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
+  // Handle appointment creation
   const handleCreateAppointment = async () => {
     if (!canManageAppointments) {
       toast.error('Access Denied');
       return;
     }
-    if (!validateNewAppointment()) return;
-    
+    if (!verifiedCitizen || !isCitizenConfirmed) {
+      toast.error('Please verify and confirm citizen identity first');
+      return;
+    }
+
+    const errors: Record<string, string> = {};
+    if (!selectedDoctorId) errors.doctor_id = 'Please select a consulting doctor';
+    if (!appointmentDate) errors.appointment_date = 'Please select an appointment date';
+    if (!timeSlot) errors.time_slot = 'Please select a time slot';
+
+    if (appointmentDate) {
+      const selectedDate = parseISO(appointmentDate);
+      if (!isToday(selectedDate) && !isFuture(selectedDate)) {
+        errors.appointment_date = 'Please select today or a future date';
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setBookingErrors(errors);
+      return;
+    }
+
     setIsSubmitting(true);
-    const { error } = await appointmentService.create({
-      citizen_id: newAppointment.citizen_id,
-      doctor_id: newAppointment.doctor_id,
-      hospital_id: newAppointment.hospital_id,
-      appointment_date: newAppointment.appointment_date,
-      time_slot: newAppointment.time_slot,
-      appointment_type: newAppointment.appointment_type as 'in_person' | 'telemedicine' | 'emergency',
-      status: 'booked',
-    });
-    setIsSubmitting(false);
-    
-    if (error) toast.error(error);
-    else {
-      toast.success('Appointment booked successfully');
-      setShowNewDialog(false);
-      setNewAppointment({
-        citizen_id: '',
-        doctor_id: '',
-        hospital_id: '',
-        department: '',
-        appointment_date: '',
-        time_slot: '',
-        appointment_type: 'in_person',
-        citizenSearch: '',
+    try {
+      const { error } = await appointmentService.create({
+        citizen_id: verifiedCitizen.citizen_id,
+        doctor_id: selectedDoctorId,
+        hospital_id: currentHospitalId,
+        appointment_date: appointmentDate,
+        time_slot: timeSlot,
+        appointment_type: appointmentType as 'in_person' | 'telemedicine' | 'emergency',
+        status: 'booked',
       });
-      loadData();
+
+      if (error) {
+        toast.error(error);
+      } else {
+        toast.success('Appointment booked successfully');
+        setShowNewDialog(false);
+        resetBookingForm();
+        loadData();
+      }
+    } catch (err) {
+      toast.error('Failed to book appointment');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -361,23 +442,11 @@ export default function AppointmentTable() {
       return;
     }
     if (!selectedAppointment) return;
-    // This would need proper form handling for reschedule
     toast.success('Appointment rescheduled');
     setShowRescheduleDialog(false);
     setSelectedAppointment(null);
     loadData();
   };
-
-  // Get unique ward names for department filter
-  const uniqueWardNames = useMemo(() => {
-    const wardNames = new Set<string>();
-    appointments.forEach(apt => {
-      if (apt.hospital_ward?.ward_name) {
-        wardNames.add(apt.hospital_ward.ward_name);
-      }
-    });
-    return Array.from(wardNames).sort();
-  }, [appointments]);
 
   if (isLoading) {
     return (
@@ -396,11 +465,25 @@ export default function AppointmentTable() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Appointment Management</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Appointment Management</h2>
+            {currentHospital && (
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 hidden sm:inline-flex">
+                <Building2 className="h-3 w-3 mr-1" />
+                {currentHospital.name} ({currentHospital.hospital_id})
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-slate-500 mt-1">Manage patient appointments and scheduling</p>
         </div>
         {canManageAppointments ? (
-          <Button onClick={() => setShowNewDialog(true)} className="bg-[#047857] hover:bg-[#065F46]">
+          <Button 
+            onClick={() => {
+              resetBookingForm();
+              setShowNewDialog(true);
+            }} 
+            className="bg-[#047857] hover:bg-[#065F46]"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Book New Appointment
           </Button>
@@ -443,9 +526,9 @@ export default function AppointmentTable() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {uniqueWardNames.map((ward) => (
-                  <SelectItem key={ward} value={ward}>
-                    {ward}
+                {uniqueDepartments.map((dept) => (
+                  <SelectItem key={dept} value={dept}>
+                    {dept}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -497,14 +580,16 @@ export default function AppointmentTable() {
                     <TableCell>
                       <div>
                         <p className="font-medium text-slate-800 dark:text-white">{apt.doctor?.name || 'N/A'}</p>
-                        {apt.doctor?.specialization && (
-                          <p className="text-xs text-slate-500 capitalize">{apt.doctor.specialization}</p>
+                        {(apt.doctor?.designation || apt.doctor?.department || apt.doctor?.specialization) && (
+                          <p className="text-xs text-slate-500 capitalize">
+                            {apt.doctor.designation || apt.doctor.department || apt.doctor.specialization}
+                          </p>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <p className="font-medium text-slate-800 dark:text-white">
-                        {apt.hospital_ward?.ward_name || apt.doctor?.specialization || 'N/A'}
+                        {apt.doctor?.department || apt.doctor?.specialization || apt.hospital_ward?.ward_name || 'General'}
                       </p>
                     </TableCell>
                     <TableCell>
@@ -675,11 +760,13 @@ export default function AppointmentTable() {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-slate-500">Hospital:</span>
-                      <p className="font-medium">{selectedAppointment.hospital?.name || 'N/A'}</p>
+                      <p className="font-medium">{selectedAppointment.hospital?.name || currentHospital?.name || 'N/A'}</p>
                     </div>
                     <div>
-                      <span className="text-slate-500">Department/Ward:</span>
-                      <p className="font-medium">{selectedAppointment.hospital_ward?.ward_name || 'N/A'}</p>
+                      <span className="text-slate-500">Department:</span>
+                      <p className="font-medium">
+                        {selectedAppointment.doctor?.department || selectedAppointment.doctor?.specialization || selectedAppointment.hospital_ward?.ward_name || 'General'}
+                      </p>
                     </div>
                     <div>
                       <span className="text-slate-500">Hospital Address:</span>
@@ -743,152 +830,353 @@ export default function AppointmentTable() {
       </Dialog>
 
       {/* New Appointment Dialog */}
-      <Dialog open={canManageAppointments && showNewDialog} onOpenChange={(o) => { setShowNewDialog(o); if (!o) setNewAppointment({ citizen_id: '', doctor_id: '', hospital_id: '', department: '', appointment_date: '', time_slot: '', appointment_type: 'in_person', citizenSearch: '' }); }}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={canManageAppointments && showNewDialog} onOpenChange={(o) => {
+        setShowNewDialog(o);
+        if (!o) resetBookingForm();
+      }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Book New Appointment</DialogTitle>
-            <DialogDescription>Schedule a new appointment for a citizen.</DialogDescription>
+            <DialogTitle className="text-xl font-bold text-slate-800 dark:text-white">Book New Appointment</DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400">
+              {!isCitizenConfirmed
+                ? "Verify citizen identity by Health ID or Aadhaar ID before scheduling."
+                : "Configure department, doctor, and time slot for this appointment."}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* Citizen Search */}
-            <div className="space-y-2">
-              <Label>Search Citizen *</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  placeholder="Search by name, phone, or Citizen ID..."
-                  value={newAppointment.citizenSearch}
-                  onChange={(e) => setNewAppointment(prev => ({ ...prev, citizenSearch: e.target.value, citizen_id: '' }))}
-                  className="pl-10"
-                />
-                {isSearchingCitizens && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />}
-              </div>
-              {searchedCitizens.length > 0 && !newAppointment.citizen_id && (
-                <div className="border rounded-lg divide-y max-h-40 overflow-auto">
-                  {searchedCitizens.slice(0, 5).map((c) => (
-                    <button key={c.citizen_id} className="w-full flex items-center gap-3 p-2 hover:bg-slate-50 text-left" onClick={() => setNewAppointment(prev => ({ ...prev, citizen_id: c.citizen_id, citizenSearch: `${c.name} (${c.citizen_id})` }))}>
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">{c.name?.charAt(0)}</div>
-                      <div>
-                        <p className="font-medium text-sm">{c.name}</p>
-                        <p className="text-xs text-slate-500">{c.citizen_id} • {c.phone}</p>
-                      </div>
-                    </button>
-                  ))}
+
+          <div className="space-y-4 py-3">
+            {/* STEP 1: CITIZEN SEARCH / VERIFICATION */}
+            {!isCitizenConfirmed ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
+                    Citizen Identification *
+                  </Label>
+                  <div className="flex gap-2">
+                    {/* ID Type Dropdown */}
+                    <Select value={idType} onValueChange={(val: 'health_id' | 'aadhar_id' | 'phone') => {
+                      setIdType(val);
+                      setVerificationError('');
+                    }}>
+                      <SelectTrigger className="w-[155px] shrink-0 bg-slate-50 dark:bg-slate-800">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="health_id">Health ID (SMC)</SelectItem>
+                        <SelectItem value="aadhar_id">Aadhaar ID</SelectItem>
+                        <SelectItem value="phone">Phone Number</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {/* ID Text Input */}
+                    <div className="relative flex-1">
+                      <Input
+                        placeholder={
+                          idType === 'health_id'
+                            ? 'e.g., SMC-2025-000001'
+                            : idType === 'aadhar_id'
+                            ? 'e.g., 900000000001'
+                            : 'e.g., 9876543210'
+                        }
+                        value={idInput}
+                        onChange={(e) => {
+                          setIdInput(e.target.value);
+                          if (verificationError) setVerificationError('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleVerifyCitizen();
+                          }
+                        }}
+                        className="bg-white dark:bg-slate-800"
+                      />
+                    </div>
+
+                    {/* Search / Verify Button */}
+                    <Button
+                      type="button"
+                      onClick={handleVerifyCitizen}
+                      disabled={isVerifyingCitizen || !idInput.trim()}
+                      className="bg-[#047857] hover:bg-[#065F46] shrink-0 text-white"
+                    >
+                      {isVerifyingCitizen ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4 mr-1.5" />
+                          Search
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {idType === 'health_id'
+                      ? "Enter citizen's unique SMC Health ID and click Search"
+                      : idType === 'aadhar_id'
+                      ? "Enter citizen's 12-digit Aadhaar number and click Search"
+                      : "Enter citizen's 10-digit registered mobile number and click Search"}
+                  </p>
+                  {verificationError && (
+                    <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>{verificationError}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-              {formErrors.citizen_id && <p className="text-sm text-red-500">{formErrors.citizen_id}</p>}
-            </div>
 
-            {/* Department */}
-            <div className="space-y-2">
-              <Label>Department *</Label>
-              <Select value={newAppointment.department} onValueChange={(v) => setNewAppointment(prev => ({ ...prev, department: v }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DEPARTMENTS.map((dept) => (
-                    <SelectItem key={dept} value={dept}>
-                      {dept.charAt(0).toUpperCase() + dept.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.department && <p className="text-sm text-red-500">{formErrors.department}</p>}
-            </div>
+                {/* VERIFIED CITIZEN CARD */}
+                {verifiedCitizen && (
+                  <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-3 animate-in fade-in">
+                    <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60 dark:border-emerald-800/60">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        <h4 className="font-semibold text-slate-800 dark:text-white">Citizen Verified</h4>
+                      </div>
+                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs">
+                        {verifiedCitizen.citizen_id}
+                      </Badge>
+                    </div>
 
-            {/* Doctor */}
-            <div className="space-y-2">
-              <Label>Doctor *</Label>
-              <Select value={newAppointment.doctor_id} onValueChange={(v) => setNewAppointment(prev => ({ ...prev, doctor_id: v }))} disabled={!newAppointment.department}>
-                <SelectTrigger>
-                  <SelectValue placeholder={newAppointment.department ? "Select doctor" : "Select department first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredDoctors.map((doc) => (
-                    <SelectItem key={doc.staff_uuid} value={doc.staff_uuid}>
-                      {doc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.doctor_id && <p className="text-sm text-red-500">{formErrors.doctor_id}</p>}
-            </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Full Name</span>
+                        <p className="font-semibold text-slate-800 dark:text-white">{verifiedCitizen.name}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Gender / Age</span>
+                        <p className="font-semibold text-slate-800 dark:text-white capitalize">
+                          {verifiedCitizen.gender || 'N/A'}{verifiedCitizen.age ? ` (${verifiedCitizen.age} yrs)` : ''}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Contact Number</span>
+                        <p className="font-semibold text-slate-800 dark:text-white flex items-center gap-1">
+                          <Phone className="h-3 w-3 text-slate-400" />
+                          {verifiedCitizen.phone || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Belonging Ward</span>
+                        <p className="font-semibold text-slate-800 dark:text-white flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-slate-400" />
+                          {verifiedCitizen.ward?.ward_name || (verifiedCitizen.ward_number ? `Ward #${verifiedCitizen.ward_number}` : 'N/A')}
+                        </p>
+                      </div>
+                      {verifiedCitizen.aadhar_id && (
+                        <div className="col-span-2">
+                          <span className="text-xs text-slate-500 dark:text-slate-400">Aadhaar Number</span>
+                          <p className="font-mono text-xs text-slate-700 dark:text-slate-300">
+                            XXXX-XXXX-{verifiedCitizen.aadhar_id.slice(-4)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
 
-            {/* Hospital */}
-            <div className="space-y-2">
-              <Label>Hospital *</Label>
-              <Select value={newAppointment.hospital_id} onValueChange={(v) => setNewAppointment(prev => ({ ...prev, hospital_id: v }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select hospital" />
-                </SelectTrigger>
-                <SelectContent>
-                  {hospitals.map((h) => (
-                    <SelectItem key={h.hospital_id} value={h.hospital_id}>
-                      {h.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.hospital_id && <p className="text-sm text-red-500">{formErrors.hospital_id}</p>}
-            </div>
-
-            {/* Date */}
-            <div className="space-y-2">
-              <Label>Appointment Date *</Label>
-              <div className="relative">
-                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  type="date"
-                  min={minDate}
-                  value={newAppointment.appointment_date}
-                  onChange={(e) => setNewAppointment(prev => ({ ...prev, appointment_date: e.target.value }))}
-                  className="pl-10"
-                />
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        className="w-full bg-[#047857] hover:bg-[#065F46] text-white"
+                        onClick={() => setIsCitizenConfirmed(true)}
+                      >
+                        Confirm Identity & Proceed to Booking
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-slate-500">Only today or future dates are allowed</p>
-              {formErrors.appointment_date && <p className="text-sm text-red-500">{formErrors.appointment_date}</p>}
-            </div>
+            ) : (
+              /* STEP 2: APPOINTMENT DETAILS (POST-CONFIRMATION) */
+              <div className="space-y-4 animate-in fade-in">
+                {/* Confirmed Patient Banner */}
+                <div className="flex items-center justify-between p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm">
+                      {verifiedCitizen?.name?.charAt(0) || 'P'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-white leading-none">
+                        {verifiedCitizen?.name}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {verifiedCitizen?.citizen_id} • {verifiedCitizen?.phone}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsCitizenConfirmed(false)}
+                    className="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-400"
+                  >
+                    Change Patient
+                  </Button>
+                </div>
 
-            {/* Time Slot */}
-            <div className="space-y-2">
-              <Label>Time Slot *</Label>
-              <Select value={newAppointment.time_slot} onValueChange={(v) => setNewAppointment(prev => ({ ...prev, time_slot: v }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select time slot" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIME_SLOTS.map((slot) => (
-                    <SelectItem key={slot} value={slot}>
-                      {slot}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.time_slot && <p className="text-sm text-red-500">{formErrors.time_slot}</p>}
-            </div>
+                {/* Hospital (Auto-assigned current hospital) */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500 dark:text-slate-400">Hospital Facility</Label>
+                  <div className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-sm">
+                    <Building2 className="h-4 w-4 text-emerald-600" />
+                    <span className="font-semibold text-slate-800 dark:text-white">
+                      {currentHospital?.name || 'Solapur Municipal Hospital'}
+                    </span>
+                    <Badge variant="outline" className="ml-auto text-xs font-mono">
+                      {currentHospitalId}
+                    </Badge>
+                  </div>
+                </div>
 
-            {/* Appointment Type */}
-            <div className="space-y-2">
-              <Label>Appointment Type</Label>
-              <Select value={newAppointment.appointment_type} onValueChange={(v) => setNewAppointment(prev => ({ ...prev, appointment_type: v }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="in_person">In-Person</SelectItem>
-                  <SelectItem value="telemedicine">Telemedicine</SelectItem>
-                  <SelectItem value="emergency">Emergency</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Department Selection */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="dept_select" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Department *
+                  </Label>
+                  <Select value={selectedDepartment} onValueChange={handleDepartmentChange}>
+                    <SelectTrigger id="dept_select" className="bg-white dark:bg-slate-800">
+                      <SelectValue placeholder="Select Department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="not_decided">
+                        <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                          Not Decided / All Departments
+                        </span>
+                      </SelectItem>
+                      {availableBookingDepartments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    {selectedDepartment === 'not_decided'
+                      ? "Showing all available hospital doctors. Selecting a doctor will auto-assign their department."
+                      : `Filtering doctors specializing in ${selectedDepartment}.`}
+                  </p>
+                </div>
+
+                {/* Doctor Selection */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="doc_select" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Consulting Doctor *
+                  </Label>
+                  <Select value={selectedDoctorId} onValueChange={handleDoctorChange}>
+                    <SelectTrigger id="doc_select" className={cn(
+                      "bg-white dark:bg-slate-800",
+                      bookingErrors.doctor_id ? "border-red-500" : ""
+                    )}>
+                      <SelectValue placeholder={availableDoctors.length > 0 ? "Choose doctor..." : "No doctors available in this department"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableDoctors.map((doc) => (
+                        <SelectItem key={doc.staff_uuid} value={doc.staff_uuid}>
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <span className="font-medium">{doc.name}</span>
+                            <span className="text-xs text-slate-500">({doc.department || doc.specialization || 'General'})</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {bookingErrors.doctor_id && (
+                    <p className="text-xs text-red-500">{bookingErrors.doctor_id}</p>
+                  )}
+                </div>
+
+                {/* Date */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="apt_date" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Appointment Date *
+                  </Label>
+                  <div className="relative">
+                    <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      id="apt_date"
+                      type="date"
+                      min={minDate}
+                      value={appointmentDate}
+                      onChange={(e) => {
+                        setAppointmentDate(e.target.value);
+                        if (bookingErrors.appointment_date) {
+                          setBookingErrors(prev => ({ ...prev, appointment_date: '' }));
+                        }
+                      }}
+                      className={cn("pl-10 bg-white dark:bg-slate-800", bookingErrors.appointment_date ? "border-red-500" : "")}
+                    />
+                  </div>
+                  {bookingErrors.appointment_date && (
+                    <p className="text-xs text-red-500">{bookingErrors.appointment_date}</p>
+                  )}
+                </div>
+
+                {/* Time Slot */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="time_slot" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Time Slot *
+                  </Label>
+                  <Select value={timeSlot} onValueChange={(v) => {
+                    setTimeSlot(v);
+                    if (bookingErrors.time_slot) setBookingErrors(prev => ({ ...prev, time_slot: '' }));
+                  }}>
+                    <SelectTrigger id="time_slot" className={cn("bg-white dark:bg-slate-800", bookingErrors.time_slot ? "border-red-500" : "")}>
+                      <SelectValue placeholder="Select consultation time slot" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_SLOTS.map((slot) => (
+                        <SelectItem key={slot} value={slot}>
+                          {slot}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {bookingErrors.time_slot && (
+                    <p className="text-xs text-red-500">{bookingErrors.time_slot}</p>
+                  )}
+                </div>
+
+                {/* Appointment Type */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Appointment Type
+                  </Label>
+                  <Select value={appointmentType} onValueChange={setAppointmentType}>
+                    <SelectTrigger className="bg-white dark:bg-slate-800">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in_person">In-Person Consultation</SelectItem>
+                      <SelectItem value="telemedicine">Telemedicine / Online</SelectItem>
+                      <SelectItem value="emergency">Emergency Walk-In</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNewDialog(false)}>Cancel</Button>
-            <Button onClick={handleCreateAppointment} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Book Appointment
+            <Button variant="outline" onClick={() => setShowNewDialog(false)}>
+              Cancel
             </Button>
+            {isCitizenConfirmed && (
+              <Button
+                onClick={handleCreateAppointment}
+                disabled={isSubmitting}
+                className="bg-[#047857] hover:bg-[#065F46] text-white"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Booking...
+                  </>
+                ) : (
+                  'Book Appointment'
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

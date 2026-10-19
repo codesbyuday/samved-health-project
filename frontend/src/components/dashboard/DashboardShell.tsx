@@ -93,7 +93,12 @@ export default function DashboardShell() {
     }
   }, [currentPage, visibleModules]);
 
-  const handleNavigate = useCallback((page: PageType) => {
+  const [selectedPatientForRecords, setSelectedPatientForRecords] = useState<any>(null);
+
+  const handleNavigate = useCallback((page: PageType, payload?: any) => {
+    if (page === 'patients' && payload) {
+      setSelectedPatientForRecords(payload);
+    }
     setCurrentPage(page);
     setIsMobileSidebarOpen(false);
   }, []);
@@ -124,7 +129,7 @@ export default function DashboardShell() {
       case "citizen-services":
         return <CitizenServices />;
       case "patients":
-        return <PatientRecords />;
+        return <PatientRecords initialCitizen={selectedPatientForRecords} />;
       case "lab-reports":
         return <LabReports />;
       case "bed-management":
@@ -188,6 +193,7 @@ export default function DashboardShell() {
         isMobileSidebarOpen={isMobileSidebarOpen}
         isSidebarCollapsed={isSidebarCollapsed}
         isMobile={isMobile}
+        onNavigate={handleNavigate}
       />
 
       <Sidebar

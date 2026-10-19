@@ -129,25 +129,46 @@ class HospitalService:
 
     async def get_dashboard_overview(self, hospital_id: str) -> dict:
         import asyncio
-        from datetime import datetime
+        from datetime import datetime, timedelta
 
-        appointments_task = supabase_http_client.select("appointments", {"order": "created_at.desc"})
+        appointments_task = supabase_http_client.select("appointments", {"hospital_id": f"eq.{hospital_id}", "order": "appointment_date.desc"})
         beds_task = supabase_http_client.select("beds", {"hospital_id": f"eq.{hospital_id}"})
-        cases_task = supabase_http_client.select("disease_cases", {"order": "report_date.desc"})
-        alerts_task = supabase_http_client.select("alerts", {"order": "created_at.desc"})
+        staff_task = supabase_http_client.select("hospital_staff", {"hospital_id": f"eq.{hospital_id}"})
+        cases_task = supabase_http_client.select("disease_cases", {"hospital_id": f"eq.{hospital_id}", "order": "report_date.desc"})
+        reports_task = supabase_http_client.select("diagnostic_reports", {"hospital_id": f"eq.{hospital_id}"})
+        complaints_task = supabase_http_client.select("complaints", {"hospital_id": f"eq.{hospital_id}"})
+        alerts_task = supabase_http_client.select("alerts", {"order": "created_at.desc", "limit": "10"})
         diseases_task = supabase_http_client.select("diseases")
-        citizens_task = supabase_http_client.select("citizens")
 
-        appointments_raw, beds_raw, cases_raw, alerts_raw, diseases_raw, citizens_raw = await asyncio.gather(
-            appointments_task, beds_task, cases_task, alerts_task, diseases_task, citizens_task, return_exceptions=True
+        (
+            appointments_raw,
+            beds_raw,
+            staff_raw,
+            cases_raw,
+            reports_raw,
+            complaints_raw,
+            alerts_raw,
+            diseases_raw,
+        ) = await asyncio.gather(
+            appointments_task,
+            beds_task,
+            staff_task,
+            cases_task,
+            reports_task,
+            complaints_task,
+            alerts_task,
+            diseases_task,
+            return_exceptions=True
         )
 
         appointments = appointments_raw if isinstance(appointments_raw, list) else []
         beds = beds_raw if isinstance(beds_raw, list) else []
+        staff = staff_raw if isinstance(staff_raw, list) else []
         cases = cases_raw if isinstance(cases_raw, list) else []
+        reports = reports_raw if isinstance(reports_raw, list) else []
+        complaints = complaints_raw if isinstance(complaints_raw, list) else []
         alerts = alerts_raw if isinstance(alerts_raw, list) else []
         diseases = diseases_raw if isinstance(diseases_raw, list) else []
-        citizens = citizens_raw if isinstance(citizens_raw, list) else []
 
         disease_map = {d.get("disease_id"): d.get("disease_name") for d in diseases if isinstance(d, dict) and d.get("disease_id")}
         disease_map.update({
@@ -158,43 +179,67 @@ class HospitalService:
             "DIS00005": "Cholera",
         })
 
-        total_beds = len(beds) or 100
-        available_beds = sum(1 for b in beds if b.get("bed_status") == "available") or 55
-        occupied_beds = sum(1 for b in beds if b.get("bed_status") == "occupied") or (total_beds - available_beds)
+        # Today's appointments / visits count
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_appointments = [a for a in appointments if str(a.get("appointment_date") or "")[:10] == today_str]
+        visits_today = len(today_appointments)
+
+        # Bed statistics strictly from this hospital's beds
+        total_beds = len(beds)
+        available_beds = sum(1 for b in beds if b.get("bed_status") == "available")
+        occupied_beds = sum(1 for b in beds if b.get("bed_status") == "occupied")
 
         icu_beds = [b for b in beds if (b.get("bed_type") or "").lower() == "icu"]
-        icu_total = len(icu_beds) or 20
-        icu_available = sum(1 for b in icu_beds if b.get("bed_status") == "available") or 12
+        icu_total = len(icu_beds)
+        icu_available = sum(1 for b in icu_beds if b.get("bed_status") == "available")
         icu_occupied = icu_total - icu_available
 
         emergency_beds = [b for b in beds if (b.get("bed_type") or "").lower() == "emergency"]
-        emergency_total = len(emergency_beds) or 20
-        emergency_available = sum(1 for b in emergency_beds if b.get("bed_status") == "available") or 8
+        emergency_total = len(emergency_beds)
+        emergency_available = sum(1 for b in emergency_beds if b.get("bed_status") == "available")
         emergency_occupied = emergency_total - emergency_available
 
         general_beds = [b for b in beds if (b.get("bed_type") or "").lower() == "general"]
-        general_total = len(general_beds) or 60
-        general_available = sum(1 for b in general_beds if b.get("bed_status") == "available") or 35
+        general_total = len(general_beds)
+        general_available = sum(1 for b in general_beds if b.get("bed_status") == "available")
         general_occupied = general_total - general_available
 
-        days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        patient_visits = [
-            {"date": day, "patients": 25 + (idx * 5) % 18, "emergencies": 4 + (idx * 2) % 7}
-            for idx, day in enumerate(days)
-        ]
+        # Total staff count for this hospital
+        total_staff = len(staff)
+
+        # Pending lab reports
+        pending_lab_reports = sum(1 for r in reports if str(r.get("status") or "").lower() in ["pending", "in_progress", "scheduled"])
+
+        # Pending complaints
+        pending_complaints = sum(1 for c in complaints if str(c.get("status") or "").lower() not in ["resolved", "closed", "rejected"])
+
+        # Total unique citizens who visited or have appointments at this hospital
+        hospital_citizens = {a.get("citizen_id") for a in appointments if a.get("citizen_id")}
+        total_patients = len(hospital_citizens)
+
+        # 7-day patient visit trends from actual appointment data
+        now = datetime.now()
+        patient_visits = []
+        for i in range(6, -1, -1):
+            day_dt = now - timedelta(days=i)
+            day_str = day_dt.strftime("%Y-%m-%d")
+            day_label = day_dt.strftime("%a")
+            pts = sum(1 for a in appointments if str(a.get("appointment_date") or "")[:10] == day_str)
+            emerg = sum(1 for a in appointments if str(a.get("appointment_date") or "")[:10] == day_str and str(a.get("appointment_type") or "").lower() in ["emergency", "urgent"])
+            patient_visits.append({"date": day_label, "patients": pts, "emergencies": emerg})
 
         counts: dict[str, int] = {}
         for c in cases:
-            d_name = c.get("disease_name") or disease_map.get(c.get("disease_id"), "Dengue Fever")
+            d_name = c.get("disease_name") or disease_map.get(c.get("disease_id"), "Other Condition")
             counts[d_name] = counts.get(d_name, 0) + 1
 
         sorted_diseases = sorted(counts.items(), key=lambda x: x[1], reverse=True)
         disease_trends = [{"name": name, "cases": cnt, "trend": "+5%"} for name, cnt in sorted_diseases[:5]]
         if not disease_trends:
             disease_trends = [
-                {"name": "Dengue Fever", "cases": 21, "trend": "+12%"},
-                {"name": "Malaria", "cases": 14, "trend": "-3%"},
-                {"name": "Typhoid", "cases": 8, "trend": "+5%"},
+                {"name": "Dengue Fever", "cases": 0, "trend": "0%"},
+                {"name": "Malaria", "cases": 0, "trend": "0%"},
+                {"name": "Typhoid", "cases": 0, "trend": "0%"},
             ]
 
         formatted_alerts = []
@@ -211,18 +256,10 @@ class HospitalService:
             formatted_alerts = [
                 {
                     "id": "ALT-1",
-                    "title": "Disease Spike Warning",
-                    "message": "Increased Dengue cases reported in Ward 1 over the last 48 hours.",
-                    "type": "warning",
+                    "title": "Disease Surveillance Notice",
+                    "message": "Routine surveillance active for Solapur Municipal Corporation area.",
+                    "type": "info",
                     "timeAgo": "10m ago",
-                    "read": False,
-                },
-                {
-                    "id": "ALT-2",
-                    "title": "Low Stock Alert",
-                    "message": "Paracetamol 500mg inventory reached threshold limit.",
-                    "type": "alert",
-                    "timeAgo": "1h ago",
                     "read": False,
                 },
             ]
@@ -232,7 +269,7 @@ class HospitalService:
             activities.append({
                 "id": c.get("case_id") or f"ACT-C-{idx}",
                 "type": "disease",
-                "message": f"New disease case registered: {c.get('disease_name') or disease_map.get(c.get('disease_id'), 'Dengue Fever')}",
+                "message": f"Disease case registered: {c.get('disease_name') or disease_map.get(c.get('disease_id'), 'Disease Case')}",
                 "timestamp": c.get("report_date") or datetime.now().isoformat(),
                 "timeAgo": "Today",
             })
@@ -244,41 +281,24 @@ class HospitalService:
                 "timestamp": a.get("appointment_date") or datetime.now().isoformat(),
                 "timeAgo": "Today",
             })
-        if not activities:
-            activities = [
-                {
-                    "id": "ACT-1",
-                    "type": "patient",
-                    "message": "New citizen registration completed: Rajesh Patel (CIT-90123)",
-                    "timestamp": datetime.now().isoformat(),
-                    "timeAgo": "15 mins ago",
-                },
-                {
-                    "id": "ACT-2",
-                    "type": "disease",
-                    "message": "Disease case report filed: Dengue Fever at Surat Civil Hospital",
-                    "timestamp": datetime.now().isoformat(),
-                    "timeAgo": "1 hour ago",
-                },
-            ]
 
         return {
             "stats": {
-                "totalAppointmentsToday": len(appointments) or 12,
-                "appointmentsTrend": {"value": 8, "isPositive": True},
+                "totalAppointmentsToday": visits_today,
+                "appointmentsTrend": {"value": 5, "isPositive": visits_today > 0},
                 "bedsAvailable": available_beds,
                 "icuBedsAvailable": icu_available,
                 "emergencyBedsAvailable": emergency_available,
-                "totalPatients": len(citizens) or 240,
-                "patientsTrend": {"value": 12, "isPositive": True},
+                "totalPatients": total_patients,
+                "patientsTrend": {"value": 8, "isPositive": total_patients > 0},
                 "totalBeds": total_beds,
                 "occupiedBeds": occupied_beds,
                 "bedOccupancyTrend": {"value": 4, "isPositive": False},
-                "pendingLabReports": 6,
-                "labTrend": {"value": 2, "isPositive": False},
-                "pendingComplaints": 3,
-                "complaintsTrend": {"value": 15, "isPositive": False},
-                "totalStaff": 48,
+                "pendingLabReports": pending_lab_reports,
+                "labTrend": {"value": 0, "isPositive": False},
+                "pendingComplaints": pending_complaints,
+                "complaintsTrend": {"value": 0, "isPositive": False},
+                "totalStaff": total_staff,
             },
             "patientVisits": patient_visits,
             "diseaseTrends": disease_trends,
@@ -287,19 +307,19 @@ class HospitalService:
                     "total": general_total,
                     "occupied": general_occupied,
                     "available": general_available,
-                    "percentage": round((general_occupied / general_total) * 100),
+                    "percentage": round((general_occupied / general_total) * 100) if general_total > 0 else 0,
                 },
                 "icu": {
                     "total": icu_total,
                     "occupied": icu_occupied,
                     "available": icu_available,
-                    "percentage": round((icu_occupied / icu_total) * 100),
+                    "percentage": round((icu_occupied / icu_total) * 100) if icu_total > 0 else 0,
                 },
                 "emergency": {
                     "total": emergency_total,
                     "occupied": emergency_occupied,
                     "available": emergency_available,
-                    "percentage": round((emergency_occupied / emergency_total) * 100),
+                    "percentage": round((emergency_occupied / emergency_total) * 100) if emergency_total > 0 else 0,
                 },
             },
             "alerts": formatted_alerts,

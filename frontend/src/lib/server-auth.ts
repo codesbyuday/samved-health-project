@@ -5,7 +5,7 @@ import { apiClient } from "@/services/apiClient";
 export function getSessionUserId(request: NextRequest) {
   const sessionValue = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const session = sessionValue ? decodeSession(sessionValue) : null;
-  return session?.role === "hospital_staff" ? session.user_id : null;
+  return session?.user_id || null;
 }
 
 export async function getAuthenticatedStaffProfile(userId: string): Promise<{

@@ -146,17 +146,19 @@ export async function getDashboardData() {
       String(row.status ?? "").toLowerCase().includes("active"),
     ).length;
     const lowMedicineStock = stock.filter(
-      (item) => (item.quantity ?? 0) <= (item.threshold ?? 0),
+      (item) => Number(item.quantity ?? 0) <= Number(item.threshold ?? 0) || Number(item.quantity ?? 0) <= 0,
     ).length;
     const criticalAlerts = alerts.filter((item) =>
       String(item.severity ?? "").toLowerCase().includes("critical"),
     ).length;
 
+    // Group disease cases chronologically by month for a clear surveillance curve
     const diseaseTrendMap = new Map<string, number>();
     diseaseCases.forEach((row) => {
-      const label = row.report_date
-        ? format(new Date(row.report_date), "dd MMM")
-        : "Unknown";
+      if (!row.report_date) return;
+      const d = new Date(row.report_date);
+      if (isNaN(d.getTime())) return;
+      const label = format(d, "MMM yyyy");
       diseaseTrendMap.set(label, (diseaseTrendMap.get(label) ?? 0) + 1);
     });
 
@@ -174,11 +176,18 @@ export async function getDashboardData() {
     });
 
     const hospitalLoadDistribution: TrendPoint[] = hospitals
+      .filter((h) => h.name)
       .slice(0, 8)
       .map((hospital) => {
         const load = hospitalLoadMap.get(hospital.hospital_id) ?? { total: 0, occupied: 0 };
+        const shortName = (hospital.name ?? hospital.hospital_id)
+          .replace(" Multispeciality", "")
+          .replace(" Rural Medical Centre", " Rural")
+          .replace(" Healthcare Centre", "")
+          .replace(" Hospital", "")
+          .trim();
         return {
-          label: hospital.name ?? hospital.hospital_id,
+          label: shortName,
           value: load.occupied,
         };
       });
@@ -188,7 +197,8 @@ export async function getDashboardData() {
         label: `Ward ${wardNumber}`,
         value: Number(row.health_index ?? 0),
       }))
-      .sort((a, b) => b.value - a.value);
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
 
     return {
       stats: [
@@ -676,21 +686,57 @@ export async function getHospitalOverviewRows(): Promise<HospitalOverviewRow[]> 
 export async function getComplaintsData(searchParams: SearchParams) {
   const supabase = await createClient();
   const page = getPage(searchParams);
-  const pageSize = getPageSize(searchParams);
-  const status = Array.isArray(searchParams.status)
-    ? searchParams.status[0]
-    : searchParams.status;
+  const pageSize = getPageSize(searchParams, 10);
+  const statusParam = Array.isArray(searchParams.status) ? searchParams.status[0] : searchParams.status;
+  const priorityParam = Array.isArray(searchParams.priority) ? searchParams.priority[0] : searchParams.priority;
+  const searchParam = Array.isArray(searchParams.search) ? searchParams.search[0] : searchParams.search;
 
+  // 1. Fetch all complaints for computing summary metrics
+  const { data: allComplaints } = await supabase
+    .from("complaints")
+    .select("complaint_id, priority, status");
+
+  const totalComplaints = allComplaints?.length ?? 0;
+  const pendingCount = (allComplaints ?? []).filter((c) => {
+    const s = String(c.status ?? "").toLowerCase();
+    return s !== "resolved";
+  }).length;
+  const highPriorityCount = (allComplaints ?? []).filter((c) => {
+    const p = String(c.priority ?? "").toLowerCase();
+    return p === "high" || p === "critical";
+  }).length;
+  const resolvedCount = (allComplaints ?? []).filter((c) => {
+    return String(c.status ?? "").toLowerCase() === "resolved";
+  }).length;
+
+  // 2. Build filtered query
   let query = supabase
     .from("complaints")
     .select(
-      "complaint_id, priority, status, remarks_by_officers, created_at, citizens(name), hospitals(name)",
+      "complaint_id, description, category, priority, status, remarks_by_officers, created_at, citizens(name), hospitals(name)",
       { count: "exact" },
     )
     .order("created_at", { ascending: false });
 
-  if (status) {
-    query = query.eq("status", status);
+  if (statusParam && statusParam !== "all") {
+    if (statusParam === "pending") {
+      query = query.neq("status", "resolved");
+    } else {
+      query = query.eq("status", statusParam);
+    }
+  }
+
+  if (priorityParam && priorityParam !== "all") {
+    if (priorityParam === "high_critical") {
+      query = query.in("priority", ["high", "critical"]);
+    } else {
+      query = query.eq("priority", priorityParam);
+    }
+  }
+
+  if (searchParam && searchParam.trim()) {
+    const term = searchParam.trim();
+    query = query.or(`complaint_id.ilike.%${term}%,description.ilike.%${term}%,category.ilike.%${term}%`);
   }
 
   const { data, count } = await query.range(
@@ -700,17 +746,32 @@ export async function getComplaintsData(searchParams: SearchParams) {
 
   const rows: ComplaintRow[] = (data ?? []).map((item: any) => ({
     complaintId: item.complaint_id,
-    citizenName: item.citizens?.name ?? "Unknown citizen",
-    hospitalName: item.hospitals?.name ?? "Unassigned",
-    priority: item.priority,
-    status: item.status,
+    citizenName: item.citizens?.name ?? "Citizen",
+    hospitalName: item.hospitals?.name ?? "General Facility",
+    description: item.description ?? "No description provided",
+    category: item.category ?? "General",
+    priority: item.priority ?? "medium",
+    status: item.status ?? "pending",
     remarks: item.remarks_by_officers,
     createdAt: item.created_at,
   }));
 
   return {
     page,
+    pageSize,
     totalPages: Math.max(1, Math.ceil((count ?? rows.length) / pageSize)),
+    totalCount: count ?? rows.length,
+    summary: {
+      total: totalComplaints,
+      pending: pendingCount,
+      highPriority: highPriorityCount,
+      resolved: resolvedCount,
+    },
+    filters: {
+      status: statusParam ?? "all",
+      priority: priorityParam ?? "all",
+      search: searchParam ?? "",
+    },
     rows,
   };
 }
@@ -988,11 +1049,12 @@ export async function getComplianceData(searchParams?: SearchParams) {
     return true;
   });
 
+  const hospitalMap = new Map(hospitals.map((h) => [h.hospitalId, h.name]));
   const summary = {
-    critical: rows.filter((row) => row.complianceStatus === "Critical").length,
-    warning: rows.filter((row) => row.complianceStatus === "Warning").length,
-    noData: rows.filter((row) => row.complianceStatus === "No Data").length,
-    compliant: rows.filter((row) => row.complianceStatus === "Compliant").length,
+    critical: filteredRows.filter((row) => row.complianceStatus === "Critical").length,
+    warning: filteredRows.filter((row) => row.complianceStatus === "Warning").length,
+    noData: filteredRows.filter((row) => row.complianceStatus === "No Data").length,
+    compliant: filteredRows.filter((row) => row.complianceStatus === "Compliant").length,
   };
 
   const wardsLookup = await getWardsLookup();
@@ -1000,7 +1062,7 @@ export async function getComplianceData(searchParams?: SearchParams) {
     .slice(0, 5)
     .map((item) => ({
       id: item.notification_id,
-      hospitalName: item.target_hospital_id ?? "Unknown Hospital",
+      hospitalName: hospitalMap.get(item.target_hospital_id) ?? item.target_hospital_id ?? "Unknown Hospital",
       createdAt: item.created_at ?? new Date().toISOString(),
     }));
 
