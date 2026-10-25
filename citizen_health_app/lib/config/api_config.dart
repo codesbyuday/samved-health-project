@@ -6,7 +6,7 @@ class ApiConfig {
   static const String defaultLocalhost = 'http://localhost:8000';
   static const String defaultLoopbackIp = 'http://127.0.0.1:8000';
   static const String defaultAndroidEmulator = 'http://10.0.2.2:8000';
-  static const String defaultHostLanIp = 'http://172.22.180.106:8000';
+  static const String defaultHostLanIp = 'http://10.96.78.137:8000';
   
   static const String prefBaseUrlKey = 'custom_api_base_url';
 
@@ -19,7 +19,7 @@ class ApiConfig {
       case TargetPlatform.android:
         // On physical devices, 127.0.0.1 works via `adb reverse tcp:8000 tcp:8000`
         // On emulators, 10.0.2.2 routes to the host machine.
-        return defaultLoopbackIp;
+        return defaultHostLanIp; // Use LAN IP for physical devices or emulators
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
       case TargetPlatform.windows:
@@ -105,6 +105,11 @@ class ApiConfig {
   static const String appointments = '$apiPrefix/appointments';
 
   // Laboratories
+  static const String laboratories = '$apiPrefix/laboratories';
+  static const String labSearchTests = '$apiPrefix/laboratories/search-tests';
+  static String laboratoryDetails(String providerId) => '$apiPrefix/laboratories/$providerId';
+  static String laboratoryCatalogue(String providerId) => '$apiPrefix/laboratories/$providerId/catalogue';
+  static String laboratoryTestDetails(String testId) => '$apiPrefix/laboratories/tests/$testId';
   static const String labReports = '$apiPrefix/laboratories/reports';
   static const String labTestTypes = '$apiPrefix/laboratories/test-types';
 

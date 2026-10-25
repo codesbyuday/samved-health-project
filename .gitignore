@@ -12,6 +12,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!citizen_health_app/lib/
+!citizen_health_app/lib/**
 parts/
 sdist/
 var/

@@ -4,6 +4,7 @@ import 'appointment/appointment_form_screen.dart';
 import 'telemedicine/telemedicine_screen.dart';
 import 'hospitals/hospital_finder_screen.dart';
 import 'emergency/emergency_assistance_screen.dart';
+import 'laboratories/laboratories_discovery_screen.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -156,6 +157,26 @@ class ServicesScreen extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const MedicineSearchScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 14),
+                NearbyServiceCard(
+                  title: 'Laboratories & Lab Tests',
+                  description:
+                      'Discover nearby diagnostic labs, explore test catalogues & compare prices.',
+                  detail: '- 6 verified diagnostic centers',
+                  icon: Icons.biotech_rounded,
+                  iconGradient: const [
+                    Color(0xFF06B6D4),
+                    Color(0xFF0284C7),
+                  ],
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LaboratoriesDiscoveryScreen(),
                       ),
                     );
                   },
