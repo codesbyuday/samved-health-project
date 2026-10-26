@@ -1,9 +1,18 @@
 import httpx
 from typing import Any, Dict, List, Optional, Union
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from app.core.config import settings
 from app.core.logging import logger
+
+try:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    HAS_ASYNC_SQLALCHEMY = True
+except (ImportError, Exception) as e:
+    logger.warning(f"SQLAlchemy asyncio extension not available: {e}")
+    AsyncSession = None
+    async_sessionmaker = None
+    create_async_engine = None
+    HAS_ASYNC_SQLALCHEMY = False
 
 
 class Base(DeclarativeBase):
@@ -15,19 +24,23 @@ database_url = settings.DATABASE_URL
 if database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-try:
-    engine = create_async_engine(
-        database_url,
-        echo=False,
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
-    )
-    async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-except Exception as e:
-    logger.warning(f"SQLAlchemy async engine setup warning: {e}")
-    engine = None
-    async_session_factory = None
+engine = None
+async_session_factory = None
+
+if HAS_ASYNC_SQLALCHEMY and create_async_engine:
+    try:
+        engine = create_async_engine(
+            database_url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=20,
+        )
+        async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    except Exception as e:
+        logger.warning(f"SQLAlchemy async engine setup warning: {e}")
+        engine = None
+        async_session_factory = None
 
 
 async def get_db():
