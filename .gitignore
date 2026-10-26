@@ -9,12 +9,12 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 !citizen_health_app/lib/
 !citizen_health_app/lib/**
-parts/
+!frontend/**/lib/
+!frontend/**/lib/**
 sdist/
 var/
 wheels/

@@ -23,9 +23,8 @@ type GeoJsonCollection = {
 
 async function getWardGeoJson(): Promise<GeoJsonCollection> {
   const possiblePaths = [
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "data", "solapur_maps.geojson"),
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "solapur_maps.geojson"),
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "Samved_essential_data", "solapur_maps.geojson"),
+    path.join(process.cwd(), "public", "data", "solapur_maps.geojson"),
+    path.join(process.cwd(), "public", "solapur_maps.geojson"),
   ];
 
   for (const filePath of possiblePaths) {
