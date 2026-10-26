@@ -1,0 +1,17 @@
+# Environments and cache
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local configuration
+.env
+.env.local
+
+# Non-production tooling and scripts
+benchmark.py
+database_indexes.sql
+docker-compose.yml
+Dockerfile
+README.md

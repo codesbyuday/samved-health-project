@@ -20,6 +20,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 # CORS setup
@@ -27,13 +28,36 @@ origins = settings.ALLOWED_ORIGINS
 if isinstance(origins, str):
     origins = [origins]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins if origins else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# When allow_credentials=True, browsers reject wildcard "*" in allow_origins.
+# Using allow_origin_regex allows credentials across any origin in development & production.
+if "*" in origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^https?:\/\/.*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins if origins else ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+@app.get("/", status_code=status.HTTP_200_OK)
+async def root():
+    return {
+        "status": "online",
+        "project": settings.PROJECT_NAME,
+        "environment": settings.ENVIRONMENT,
+        "docs_url": "/docs",
+        "health_check": "/health",
+        "api_v1": settings.API_V1_STR,
+    }
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)

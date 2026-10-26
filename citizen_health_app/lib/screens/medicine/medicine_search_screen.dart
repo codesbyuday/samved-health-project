@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../models/medicine_model.dart';
+import '../../models/pharmacy_model.dart';
 import '../../services/pharmacy_service.dart';
+import 'pharmacy_details_screen.dart';
 
 class MedicineSearchScreen extends StatefulWidget {
   const MedicineSearchScreen({super.key});
@@ -9,959 +14,1457 @@ class MedicineSearchScreen extends StatefulWidget {
   State<MedicineSearchScreen> createState() => _MedicineSearchScreenState();
 }
 
-class _MedicineSearchScreenState extends State<MedicineSearchScreen> {
-  final TextEditingController searchController = TextEditingController();
+class _MedicineSearchScreenState extends State<MedicineSearchScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final TextEditingController _pharmacySearchController = TextEditingController();
+  final TextEditingController _medicineSearchController = TextEditingController();
+  Timer? _debounceTimer;
 
-  bool isLoading = true;
-  String errorMessage = '';
-  List<_MedicineItem> medicines = [];
+  // Location state
+  double? _userLat;
+  double? _userLon;
+  bool _isLocationAvailable = false;
+  bool _isCheckingLocation = false;
+  String? _locationStatusMessage;
+  bool _isPermanentlyDenied = false;
+  bool _isGpsDisabled = false;
+
+  // Tab 1: Pharmacies state
+  List<PharmacyModel> _allPharmacies = [];
+  List<PharmacyModel> _filteredPharmacies = [];
+  bool _isLoadingPharmacies = true;
+  String? _pharmaciesErrorMessage;
+
+  // Tab 2: Medicines search state
+  List<MedicineModel> _allMedicines = [];
+  List<MedicineModel> _displayedMedicines = [];
+  bool _isLoadingMedicines = false;
+  bool _hasLoadedMedicines = false; // Lazy loading Tab 2
+  String? _medicinesErrorMessage;
+  String _selectedCategory = 'All';
+  String _sortBy = 'nearby'; // 'nearby', 'price_asc', 'price_desc', 'name'
+
+  final List<String> _categories = [
+    'All',
+    'Analgesic/Antipyretic',
+    'Antibiotic',
+    'Antidiabetic',
+    'Antihistamine',
+    'Electrolyte',
+    'Antacid/GI',
+    'Cardiovascular',
+    'Antimalarial',
+    'Vitamins',
+  ];
 
   @override
   void initState() {
     super.initState();
-    searchController.addListener(_onSearchChanged);
-    fetchMedicines();
+    _tabController = TabController(length: 2, vsync: this);
+
+    // Lazy load Tab 2 when user switches to it
+    _tabController.addListener(_onTabChanged);
+
+    _pharmacySearchController.addListener(_onPharmacySearchChanged);
+    _medicineSearchController.addListener(_onMedicineSearchInputChanged);
+
+    // Initial load: check location and load Tab 1 pharmacies immediately
+    _initData();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.index == 1 && !_hasLoadedMedicines && !_isLoadingMedicines) {
+      _hasLoadedMedicines = true;
+      _fetchMedicines();
+    }
   }
 
   @override
   void dispose() {
-    searchController.removeListener(_onSearchChanged);
-    searchController.dispose();
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
+    _debounceTimer?.cancel();
+    _pharmacySearchController.removeListener(_onPharmacySearchChanged);
+    _pharmacySearchController.dispose();
+    _medicineSearchController.removeListener(_onMedicineSearchInputChanged);
+    _medicineSearchController.dispose();
     super.dispose();
   }
 
-  Future<void> fetchMedicines() async {
-    try {
-      final data = await _fetchMedicineRows();
-      if (!mounted) return;
-      setState(() {
-        medicines = data;
-        isLoading = false;
-        errorMessage = '';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        medicines = const [];
-        isLoading = false;
-        errorMessage = e.toString();
-      });
-    }
+  Future<void> _initData() async {
+    // 1. Check location concurrently
+    _checkUserLocation();
+    // 2. Load pharmacies for Tab 1 immediately
+    _loadPharmacies();
   }
 
-  Future<List<_MedicineItem>> _fetchMedicineRows() async {
+  // ==========================================
+  // RESILIENT LOCATION RESOLUTION (Cached + Medium Fallback)
+  // ==========================================
+  Future<void> _checkUserLocation() async {
+    if (!mounted) return;
+    setState(() {
+      _isCheckingLocation = true;
+      _isPermanentlyDenied = false;
+      _isGpsDisabled = false;
+    });
+
     try {
-      final serviceMedicines = await PharmacyService.getMedicines();
-      if (serviceMedicines.isNotEmpty) {
-        return serviceMedicines.map((m) {
-          return _MedicineItem(
-            medicineId: m.medicineId,
-            category: m.category ?? 'Essential Medication',
-            manufacturer: m.manufacturer ?? 'Approved SMC Manufacturer',
-            description: '${m.dosageForm ?? ""} ${m.strength ?? ""}'.trim(),
-            stock: m.quantity ?? 100,
-            expiryDate: m.expiryDate ?? '2026-12-31',
-            name: m.name,
-            pharmacyName: m.pharmacyName ?? 'SMC Municipal Pharmacy',
-            address: m.pharmacyAddress ?? 'Solapur Municipal Health Center',
-            phone: m.pharmacyPhone ?? '+91 217 2740300',
-            latitude: 17.6599,
-            longitude: 75.9064,
-            isAvailable: m.isAvailable,
-            price: m.unitPrice,
-            distanceKm: 1.5,
-            hasDetails: true,
-          );
-        }).toList();
+      // 1. Check if location services (GPS) are enabled on the device
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        setState(() {
+          _isLocationAvailable = false;
+          _isGpsDisabled = true;
+          _locationStatusMessage = 'Device GPS / Location service is turned off.';
+          _isCheckingLocation = false;
+        });
+        return;
+      }
+
+      // 2. Check and request location permission
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied) {
+        if (!mounted) return;
+        setState(() {
+          _isLocationAvailable = false;
+          _locationStatusMessage = 'Location permission is required to calculate distances.';
+          _isCheckingLocation = false;
+        });
+        return;
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        setState(() {
+          _isLocationAvailable = false;
+          _isPermanentlyDenied = true;
+          _locationStatusMessage = 'Location permission permanently denied. Enable it in App Settings.';
+          _isCheckingLocation = false;
+        });
+        return;
+      }
+
+      // 3. Fast Path: cached last known position
+      Position? position;
+      try {
+        position = await Geolocator.getLastKnownPosition();
+      } catch (_) {}
+
+      final cachedPos = position;
+      if (cachedPos != null && mounted) {
+        setState(() {
+          _userLat = cachedPos.latitude;
+          _userLon = cachedPos.longitude;
+          _isLocationAvailable = true;
+          _locationStatusMessage = null;
+        });
+        _updateDistancesForAllItems();
+      }
+
+      // 4. Fresh GPS Path: medium accuracy (fast & battery efficient)
+      try {
+        final freshPos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 12),
+        );
+        position = freshPos;
+      } catch (_) {
+        if (position == null) {
+          try {
+            position = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.low,
+              timeLimit: const Duration(seconds: 8),
+            );
+          } catch (_) {}
+        }
+      }
+
+      if (!mounted) return;
+
+      final finalPos = position;
+      if (finalPos != null) {
+        setState(() {
+          _userLat = finalPos.latitude;
+          _userLon = finalPos.longitude;
+          _isLocationAvailable = true;
+          _locationStatusMessage = null;
+          _isCheckingLocation = false;
+        });
+        _updateDistancesForAllItems();
+      } else {
+        setState(() {
+          _isLocationAvailable = false;
+          _locationStatusMessage = 'Could not acquire GPS fix. Distances displayed as N/A.';
+          _isCheckingLocation = false;
+        });
       }
     } catch (e) {
-      debugPrint('PharmacyService error in search screen: $e');
+      if (!mounted) return;
+      setState(() {
+        _isLocationAvailable = false;
+        _locationStatusMessage = 'Location unavailable. Distances displayed as N/A.';
+        _isCheckingLocation = false;
+      });
     }
-
-    return const [];
   }
 
-  Map<String, dynamic> _extractNestedMap(dynamic value) {
-    if (value is List && value.isNotEmpty && value.first is Map<String, dynamic>) {
-      return value.first as Map<String, dynamic>;
+  /// Recalculates distances locally across loaded pharmacies and medicines
+  void _updateDistancesForAllItems() {
+    if (_userLat == null || _userLon == null) return;
+
+    // Update pharmacies
+    for (int i = 0; i < _allPharmacies.length; i++) {
+      final p = _allPharmacies[i];
+      if (p.latitude != null && p.longitude != null) {
+        final dist = PharmacyService.calculateDistance(
+          _userLat!,
+          _userLon!,
+          p.latitude!,
+          p.longitude!,
+        );
+        _allPharmacies[i] = p.copyWith(distanceKm: dist);
+      }
     }
-    if (value is Map<String, dynamic>) {
-      return value;
+    _onPharmacySearchChanged();
+
+    // Update medicines
+    for (int i = 0; i < _allMedicines.length; i++) {
+      final m = _allMedicines[i];
+      if (m.latitude != null && m.longitude != null) {
+        final dist = PharmacyService.calculateDistance(
+          _userLat!,
+          _userLon!,
+          m.latitude!,
+          m.longitude!,
+        );
+        _allMedicines[i] = m.copyWith(distanceKm: dist);
+      }
     }
-    return const {};
+    _applyLocalMedicineFiltersAndSorting();
+
+    if (mounted) setState(() {});
   }
 
-  void _onSearchChanged() {
-    if (!mounted) return;
-    setState(() {});
-  }
+  // ==========================================
+  // TAB 1: PHARMACIES FETCHING & FILTERING
+  // ==========================================
+  Future<void> _loadPharmacies() async {
+    setState(() {
+      _isLoadingPharmacies = true;
+      _pharmaciesErrorMessage = null;
+    });
 
-  Future<void> openMaps(_MedicineItem item) async {
-    if (item.latitude == null || item.longitude == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Location not available"),
-        ),
+    try {
+      final pharmacies = await PharmacyService.getPharmacies(
+        latitude: _userLat,
+        longitude: _userLon,
       );
+
+      if (!mounted) return;
+      setState(() {
+        _allPharmacies = pharmacies;
+        _isLoadingPharmacies = false;
+      });
+      _onPharmacySearchChanged();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingPharmacies = false;
+        _pharmaciesErrorMessage = 'Failed to load pharmacies: $e';
+      });
+    }
+  }
+
+  void _onPharmacySearchChanged() {
+    final query = _pharmacySearchController.text.trim().toLowerCase();
+    List<PharmacyModel> list = List.from(_allPharmacies);
+
+    if (query.isNotEmpty) {
+      list = list.where((p) {
+        final name = p.name.toLowerCase();
+        final addr = (p.address ?? '').toLowerCase();
+        final phone = (p.phone ?? '').toLowerCase();
+        final lic = (p.license ?? '').toLowerCase();
+        return name.contains(query) ||
+            addr.contains(query) ||
+            phone.contains(query) ||
+            lic.contains(query);
+      }).toList();
+    }
+
+    // Sort by proximity if available, else by name
+    if (_userLat != null && _userLon != null) {
+      list.sort((a, b) {
+        final aDist = a.distanceKm ?? 999999;
+        final bDist = b.distanceKm ?? 999999;
+        return aDist.compareTo(bDist);
+      });
+    } else {
+      list.sort((a, b) => a.name.compareTo(b.name));
+    }
+
+    if (mounted) {
+      setState(() {
+        _filteredPharmacies = list;
+      });
+    }
+  }
+
+  // ==========================================
+  // TAB 2: MEDICINES FETCHING & FILTERING
+  // ==========================================
+  Future<void> _fetchMedicines() async {
+    setState(() {
+      _isLoadingMedicines = true;
+      _medicinesErrorMessage = null;
+    });
+
+    try {
+      final offerings = await PharmacyService.getMedicineAvailability(
+        latitude: _userLat,
+        longitude: _userLon,
+        sortBy: _sortBy,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _allMedicines = offerings;
+        _isLoadingMedicines = false;
+      });
+      _applyLocalMedicineFiltersAndSorting();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingMedicines = false;
+        _medicinesErrorMessage = 'Failed to load medicine availability: $e';
+      });
+    }
+  }
+
+  void _onMedicineSearchInputChanged() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _applyLocalMedicineFiltersAndSorting();
+    });
+  }
+
+  void _applyLocalMedicineFiltersAndSorting() {
+    final query = _medicineSearchController.text.trim().toLowerCase();
+    List<MedicineModel> list = List.from(_allMedicines);
+
+    // 1. Search query filter
+    if (query.isNotEmpty) {
+      list = list.where((m) {
+        final name = m.name.toLowerCase();
+        final cat = (m.category ?? '').toLowerCase();
+        final mfr = (m.manufacturer ?? '').toLowerCase();
+        final ph = (m.pharmacyName ?? '').toLowerCase();
+        final addr = (m.pharmacyAddress ?? '').toLowerCase();
+        return name.contains(query) ||
+            cat.contains(query) ||
+            mfr.contains(query) ||
+            ph.contains(query) ||
+            addr.contains(query);
+      }).toList();
+    }
+
+    // 2. Category filter
+    if (_selectedCategory != 'All') {
+      final cleanCat = _selectedCategory.toLowerCase();
+      list = list.where((m) {
+        final c = (m.category ?? '').toLowerCase();
+        return c.contains(cleanCat) || cleanCat.contains(c);
+      }).toList();
+    }
+
+    // 3. Sorting
+    if (_sortBy == 'nearby') {
+      if (_userLat != null && _userLon != null) {
+        list.sort((a, b) {
+          final aDist = a.distanceKm ?? 999999;
+          final bDist = b.distanceKm ?? 999999;
+          return aDist.compareTo(bDist);
+        });
+      } else {
+        list.sort((a, b) => a.name.compareTo(b.name));
+      }
+    } else if (_sortBy == 'price_asc') {
+      list.sort((a, b) {
+        final aPrice = (a.unitPrice != null && a.unitPrice! > 0) ? a.unitPrice! : 999999;
+        final bPrice = (b.unitPrice != null && b.unitPrice! > 0) ? b.unitPrice! : 999999;
+        return aPrice.compareTo(bPrice);
+      });
+    } else if (_sortBy == 'price_desc') {
+      list.sort((a, b) {
+        final aPrice = (a.unitPrice != null && a.unitPrice! > 0) ? a.unitPrice! : -1;
+        final bPrice = (b.unitPrice != null && b.unitPrice! > 0) ? b.unitPrice! : -1;
+        return bPrice.compareTo(aPrice);
+      });
+    } else if (_sortBy == 'name') {
+      list.sort((a, b) => a.name.compareTo(b.name));
+    }
+
+    if (mounted) {
+      setState(() {
+        _displayedMedicines = list;
+      });
+    }
+  }
+
+  // ==========================================
+  // EXTERNAL ACTIONS: PHONE & DIRECTIONS
+  // ==========================================
+  Future<void> _makePhoneCall(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    final uri = Uri.parse('tel:$cleanPhone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _openDirections({
+    required double? lat,
+    required double? lon,
+    String? name,
+    String? address,
+  }) async {
+    if (lat == null && lon == null && (address == null || address.isEmpty)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location coordinates not available for directions'),
+          ),
+        );
+      }
       return;
     }
 
-    final Uri googleMapsUrl = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}',
+    final String destination = (lat != null && lon != null)
+        ? '$lat,$lon'
+        : Uri.encodeComponent('${name ?? "Pharmacy"}, ${address ?? "Solapur"}');
+
+    final Uri googleMapsDirUrl = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$destination',
     );
 
     try {
-      await launchUrl(
-        googleMapsUrl,
+      final launched = await launchUrl(
+        googleMapsDirUrl,
         mode: LaunchMode.externalApplication,
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Could not open Google Maps"),
-        ),
-      );
+      if (!launched) {
+        final Uri googleMapsSearchUrl = Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=$destination',
+        );
+        await launchUrl(
+          googleMapsSearchUrl,
+          mode: LaunchMode.externalApplication,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open Google Maps'),
+          ),
+        );
+      }
     }
   }
 
-    void _showMedicineDetails(BuildContext context, _MedicineItem item) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
+  // ==========================================
+  // MAIN BUILD
+  // ==========================================
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7FAFF),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF12284C), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Medicine & Pharmacy Finder',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF12284C),
           ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-
-                /// Drag Handle
-                Center(
-                  child: Container(
-                    width: 45,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+        ),
+        centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+              indicator: BoxDecoration(
+                color: const Color(0xFF0284C7),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x260284C7),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
                   ),
-                ),
-
-                const SizedBox(height: 20),
-
-                /// Medicine Name
-                Text(
-                  "💊 ${item.name}",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                /// Availability
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: item.isAvailable
-                    ? Colors.green.shade100
-                    : Colors.red.shade100,
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Text(
-                    item.isAvailable ? "🟢 In Stock" : "🔴 Out of Stock",
-                    style: TextStyle(
-                      color: item.isAvailable
-                          ? Colors.green
-                          : Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                buildInfoTile(Icons.medication,
-                    "Category", item.category),
-
-                buildInfoTile(Icons.business,
-                    "Manufacturer", item.manufacturer),
-
-                buildInfoTile(Icons.inventory_2,
-                    "Available Stock", "${item.stock} Units"),
-
-                buildInfoTile(Icons.calendar_month,
-                    "Expiry", item.expiryDate),
-
-                const SizedBox(height: 25),
-
-                /// Description Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-
-                      Row(
-                        children: [
-                          Icon(Icons.info,
-                              color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text(
-                            "About Medicine",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      SizedBox(height: 10),
-
-                      Text(
-                          item.description,
-                          style: TextStyle(fontSize: 15),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 25),
-
-                /// Pharmacy Card
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(18),
-                  ),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                ],
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: Colors.white,
+              unselectedLabelColor: const Color(0xFF64748B),
+              labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              tabs: const [
+                Tab(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-
-                        Row(
-                          children: [
-                            Icon(Icons.local_pharmacy,
-                                color: Colors.red),
-                            SizedBox(width: 8),
-                            Text(
-                              "Pharmacy",
-                              style: TextStyle(
-                                fontWeight:
-                                    FontWeight.bold,
-                                fontSize: 17,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        SizedBox(height: 15),
-
-                        Text(
-                          item.pharmacyName,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight:
-                                FontWeight.w600,
-                          ),
-                        ),
-
-                        SizedBox(height: 10),
-
-                        Row(
-                          children: [
-                            Icon(Icons.location_on,
-                                size: 18),
-                            SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                              item.address,
-                            ),
-                            ),
-                          ],
-                        ),
-
-                        SizedBox(height: 8),
-
-                        Row(
-                          children: [
-                            Icon(Icons.phone,
-                                size: 18),
-                            SizedBox(width: 6),
-                            Text(item.phone),
-                          ],
-                        ),
+                        Icon(Icons.local_pharmacy_rounded, size: 15),
+                        SizedBox(width: 5),
+                        Text('Pharmacies & Medicals'),
                       ],
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 30),
-
-                /// Get Directions Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.map),
-                    label: const Text(
-                      "Get Directions",
-                      style: TextStyle(fontSize: 16),
+                Tab(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.medication_liquid_rounded, size: 15),
+                        SizedBox(width: 5),
+                        Text('Find Medicines'),
+                      ],
                     ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(14),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      openMaps(item);
-                    },
                   ),
                 ),
-
-                const SizedBox(height: 12),
-
-                /// Call Button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.call),
-                    label: const Text(
-                      "Call Pharmacy",
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(14),
-                      ),
-                    ),
-                    onPressed: () async {
-
-                      final Uri phoneUri = Uri(
-                        scheme: 'tel',
-                        path: item.phone,
-                      );
-
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 10),
               ],
+            ),
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          // Non-intrusive Location Status Banner
+          if (!_isLocationAvailable && _locationStatusMessage != null)
+            _buildLocationStatusBanner(),
+
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildPharmaciesTab(),
+                _buildMedicineSearchTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // LOCATION BANNER
+  // ==========================================
+  Widget _buildLocationStatusBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      color: const Color(0xFFFFFBEB),
+      child: Row(
+        children: [
+          const Icon(Icons.location_off_rounded, color: Color(0xFFD97706), size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _locationStatusMessage!,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), fontWeight: FontWeight.w500),
+            ),
+          ),
+          const SizedBox(width: 6),
+          if (_isGpsDisabled)
+            TextButton(
+              onPressed: () async {
+                await Geolocator.openLocationSettings();
+                _checkUserLocation();
+              },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Turn On', style: TextStyle(color: Color(0xFFD97706), fontSize: 11, fontWeight: FontWeight.w700)),
+            )
+          else if (_isPermanentlyDenied)
+            TextButton(
+              onPressed: () async {
+                await Geolocator.openAppSettings();
+                _checkUserLocation();
+              },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Settings', style: TextStyle(color: Color(0xFFD97706), fontSize: 11, fontWeight: FontWeight.w700)),
+            )
+          else
+            TextButton(
+              onPressed: _checkUserLocation,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: _isCheckingLocation
+                  ? const SizedBox(height: 12, width: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFD97706)))
+                  : const Text('Retry', style: TextStyle(color: Color(0xFFD97706), fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // TAB 1: PHARMACIES & MEDICALS TAB (LAZY LOADED)
+  // ==========================================
+  Widget _buildPharmaciesTab() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _checkUserLocation();
+        await _loadPharmacies();
+      },
+      color: const Color(0xFF0284C7),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Search Bar
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x060F172A),
+                          blurRadius: 10,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _pharmacySearchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search pharmacies, medical stores...',
+                        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF94A3B8), size: 20),
+                        suffixIcon: _pharmacySearchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                onPressed: () => _pharmacySearchController.clear(),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Header summary
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_filteredPharmacies.length} Approved Pharmacies',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
+                      if (_isLocationAvailable)
+                        const Text(
+                          'Sorted by nearby',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.w600),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            ),
+          ),
+
+          if (_isLoadingPharmacies)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF0284C7)),
+              ),
+            )
+          else if (_pharmaciesErrorMessage != null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildErrorRetryView(_pharmaciesErrorMessage!, _loadPharmacies),
+            )
+          else if (_filteredPharmacies.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyView('No approved pharmacies found matching your search.'),
+            )
+          else
+            // Virtualized lazy loading of pharmacy cards
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+              sliver: SliverList.separated(
+                itemCount: _filteredPharmacies.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final pharmacy = _filteredPharmacies[index];
+                  return _buildPharmacyCard(pharmacy);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPharmacyCard(PharmacyModel pharmacy) {
+    final hasDistance = pharmacy.distanceKm != null;
+    final distText = pharmacy.distanceText;
+    final isJanAushadhi = pharmacy.name.toLowerCase().contains('aushadhi');
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PharmacyDetailsScreen(
+              pharmacy: pharmacy,
+              userLatitude: _userLat,
+              userLongitude: _userLon,
             ),
           ),
         );
       },
-    );
-  }
-
-  Widget buildInfoTile(
-      IconData icon,
-      String title,
-      String value,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-
-          Icon(
-            icon,
-            color: Colors.teal,
-            size: 24,
-          ),
-
-          const SizedBox(width: 14),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 13,
-                  ),
-                ),
-
-                const SizedBox(height: 2),
-
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x080F172A),
+              blurRadius: 14,
+              offset: Offset(0, 4),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final query = searchController.text.trim().toLowerCase();
-    final filteredMedicines = medicines.where((medicine) {
-      if (query.isEmpty) return true;
-      return medicine.name.toLowerCase().contains(query);
-    }).toList();
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFF),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 286,
-            child: Stack(
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(20, 54, 20, 118),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF2563EB),
-                        Color(0xFF0EA5E9),
-                        Color(0xFF06B6D4),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(30),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0x1A2563EB),
-                        blurRadius: 24,
-                        offset: Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _HeaderButton(
-                        icon: Icons.arrow_back_ios_new_rounded,
-                        onTap: () => Navigator.pop(context),
-                      ),
-                      const SizedBox(width: 14),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Medicine Availability',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Search and check availability of medicines',
-                              style: TextStyle(
-                                color: Color(0xE6FFFFFF),
-                                fontSize: 14,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.18),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: const Icon(
-                          Icons.medication_outlined,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 18,
-                  child: SearchBarWidget(
-                    controller: searchController,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-              children: [
-                const InfoBanner(),
-                const SizedBox(height: 18),
-                if (isLoading)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 40),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (errorMessage.isNotEmpty)
-                  _EmptyState(
-                    title: 'Unable to load medicines',
-                    subtitle: errorMessage,
-                  )
-                else if (filteredMedicines.isEmpty)
-                  const _EmptyState(
-                    title: 'No medicines found',
-                    subtitle:
-                        'Try searching with a different medicine name.',
-                  )
-                else
-                  ...filteredMedicines.map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: MedicineCard(
-                          item: item,
-                          onDirections: () => openMaps(item),
-                          onViewDetails: () => _showMedicineDetails(context, item),
-                        ),
-                      ),
-                    ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class SearchBarWidget extends StatelessWidget {
-  const SearchBarWidget({
-    super.key,
-    required this.controller,
-  });
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x140F172A),
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          hintText: 'Search medicines (e.g., Paracetamol)',
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            color: Color(0xFF64748B),
-          ),
-          border: InputBorder.none,
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class InfoBanner extends StatelessWidget {
-  const InfoBanner({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE6F7FB),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: const Row(
-        children: [
-          Icon(
-            Icons.location_on_outlined,
-            color: Color(0xFF0891B2),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Showing availability in nearby pharmacies',
-              style: TextStyle(
-                color: Color(0xFF0F766E),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class MedicineCard extends StatelessWidget {
-  const MedicineCard({
-    super.key,
-    required this.item,
-    required this.onDirections,
-    required this.onViewDetails,
-  });
-
-  final _MedicineItem item;
-  final VoidCallback onDirections;
-  final VoidCallback onViewDetails;
-
-  @override
-  Widget build(BuildContext context) {
-    final accentColor =
-        item.isAvailable ? const Color(0xFF16A34A) : const Color(0xFFDC2626);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x140F172A),
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            top: 20,
-            bottom: 20,
-            child: Container(
-              width: 5,
-              decoration: BoxDecoration(
-                color: accentColor,
-                borderRadius: const BorderRadius.horizontal(
-                  right: Radius.circular(10),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-            child: Column(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      height: 60,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: item.isAvailable
-                              ? const [Color(0xFF22C55E), Color(0xFF16A34A)]
-                              : const [Color(0xFFEF4444), Color(0xFFDC2626)],
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Icon(
-                        Icons.medication_outlined,
-                        color: Colors.white,
-                        size: 30,
-                      ),
+                Container(
+                  height: 48,
+                  width: 48,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF0284C7), Color(0xFF0369A1)],
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.local_pharmacy_rounded, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        pharmacy.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF12284C),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 4,
                         children: [
-                          Text(
-                            item.name,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isJanAushadhi
+                                  ? const Color(0xFFE0F2FE)
+                                  : const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.verified_rounded,
+                                  color: isJanAushadhi
+                                      ? const Color(0xFF0284C7)
+                                      : const Color(0xFF16A34A),
+                                  size: 11,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  isJanAushadhi ? 'Jan Aushadhi' : 'Verified',
+                                  style: TextStyle(
+                                    color: isJanAushadhi
+                                        ? const Color(0xFF0284C7)
+                                        : const Color(0xFF16A34A),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            item.pharmacyName,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF334155),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE0F2FE),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              distText,
+                              style: TextStyle(
+                                color: hasDistance ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            item.availabilityText,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: accentColor,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${pharmacy.medicinesCount} Medicines',
+                              style: const TextStyle(
+                                color: Color(0xFF475569),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Text(
-                      item.distanceText,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Text(
-                      item.priceText,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: item.hasDetails
-                          ? onViewDetails
-                          : null,
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Text('View Details'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF2563EB), Color(0xFF06B6D4)],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: onDirections,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: const Text('Directions'),
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined, color: Color(0xFF94A3B8), size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    pharmacy.address ?? 'Solapur, Maharashtra',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.3),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.access_time_rounded, color: Color(0xFF94A3B8), size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    pharmacy.operatingHours,
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (pharmacy.phone != null && pharmacy.phone!.isNotEmpty) ...[
+                  InkWell(
+                    onTap: () => _makePhoneCall(pharmacy.phone!),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFBBF7D0)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.call, color: Color(0xFF16A34A), size: 14),
+                          SizedBox(width: 4),
+                          Text('Call', style: TextStyle(color: Color(0xFF16A34A), fontSize: 12, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                InkWell(
+                  onTap: () => _openDirections(
+                    lat: pharmacy.latitude,
+                    lon: pharmacy.longitude,
+                    name: pharmacy.name,
+                    address: pharmacy.address,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.directions_rounded, color: Color(0xFF2563EB), size: 14),
+                        SizedBox(width: 4),
+                        Text('Directions', style: TextStyle(color: Color(0xFF2563EB), fontSize: 12, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PharmacyDetailsScreen(
+                          pharmacy: pharmacy,
+                          userLatitude: _userLat,
+                          userLongitude: _userLon,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 15),
+                  label: const Text('View Details', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0284C7),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // TAB 2: FIND MEDICINES TAB (LAZY LOADED)
+  // ==========================================
+  Widget _buildMedicineSearchTab() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _checkUserLocation();
+        await _fetchMedicines();
+      },
+      color: const Color(0xFF0284C7),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          // Search & Filter Header
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Search Field
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x060F172A),
+                          blurRadius: 10,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _medicineSearchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search medicine name, salt, category...',
+                        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF94A3B8), size: 20),
+                        suffixIcon: _medicineSearchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                onPressed: () => _medicineSearchController.clear(),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Category Filter Chips
+                  SizedBox(
+                    height: 38,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final cat = _categories[index];
+                        final isSelected = _selectedCategory == cat;
+                        return ChoiceChip(
+                          label: Text(
+                            cat,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              color: isSelected ? Colors.white : const Color(0xFF475569),
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: const Color(0xFF0284C7),
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() {
+                                _selectedCategory = cat;
+                              });
+                              _applyLocalMedicineFiltersAndSorting();
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Sort & Count Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_displayedMedicines.length} Available Medicines',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _sortBy,
+                            isDense: true,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0284C7),
+                            ),
+                            icon: const Icon(Icons.tune_rounded, size: 16, color: Color(0xFF0284C7)),
+                            items: const [
+                              DropdownMenuItem(value: 'nearby', child: Text('Sort: Nearby')),
+                              DropdownMenuItem(value: 'price_asc', child: Text('Price: Low to High')),
+                              DropdownMenuItem(value: 'price_desc', child: Text('Price: High to Low')),
+                              DropdownMenuItem(value: 'name', child: Text('Name: A to Z')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _sortBy = val;
+                                });
+                                _applyLocalMedicineFiltersAndSorting();
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
+
+          // Medicines List
+          if (_isLoadingMedicines)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF0284C7)),
+              ),
+            )
+          else if (_medicinesErrorMessage != null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildErrorRetryView(_medicinesErrorMessage!, _fetchMedicines),
+            )
+          else if (_displayedMedicines.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyView('No medicines found matching your criteria.'),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+              sliver: SliverList.separated(
+                itemCount: _displayedMedicines.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final medicine = _displayedMedicines[index];
+                  return _buildMedicineCard(medicine);
+                },
+              ),
+            ),
         ],
       ),
     );
   }
-}
 
-class _HeaderButton extends StatelessWidget {
-  const _HeaderButton({
-    required this.icon,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: 48,
-        width: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.18),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Icon(icon, color: Colors.white, size: 20),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.title,
-    required this.subtitle,
-  });
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
+  // ==========================================
+  // MEDICINE OFFERING CARD (CLEAN UI, NO GOVT BADGES)
+  // ==========================================
+  Widget _buildMedicineCard(MedicineModel item) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x120F172A),
-            blurRadius: 18,
-            offset: Offset(0, 8),
+            color: Color(0x06000000),
+            blurRadius: 10,
+            offset: Offset(0, 3),
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.medication_liquid_outlined,
-            size: 42,
-            color: Color(0xFF94A3B8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 44,
+                width: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFDCFCE7)),
+                ),
+                child: const Icon(
+                  Icons.medication_rounded,
+                  color: Color(0xFF16A34A),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF12284C),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${item.category ?? "General"} • ${item.manufacturer ?? "Approved Manufacturer"}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Price Badge (Clean UI: only displayed when valid price exists, no "Govt Supply" badge)
+              if (item.priceBadgeText != null)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0F2FE),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBAE6FD)),
+                  ),
+                  child: Text(
+                    item.priceBadgeText!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0284C7),
+                    ),
+                  ),
+                ),
+            ],
           ),
+
           const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF0F172A),
-            ),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 10),
+
+          // Pharmacy Name & Address
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.local_pharmacy_outlined, size: 15, color: Color(0xFF0284C7)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${item.pharmacyName ?? "Pharmacy"} • ${item.pharmacyAddress ?? "Solapur"}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF334155),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
+
           const SizedBox(height: 8),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF64748B),
-              height: 1.5,
-            ),
+
+          // Availability status & Distance row
+          Row(
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: item.isAvailable ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  item.availabilityText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: item.isAvailable ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  item.distanceText,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0284C7),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Action Buttons: Call & Directions
+          Row(
+            children: [
+              if (item.pharmacyPhone != null && item.pharmacyPhone!.isNotEmpty) ...[
+                InkWell(
+                  onTap: () => _makePhoneCall(item.pharmacyPhone!),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.call, color: Color(0xFF16A34A), size: 14),
+                        SizedBox(width: 4),
+                        Text('Call', style: TextStyle(color: Color(0xFF16A34A), fontSize: 12, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              InkWell(
+                onTap: () => _openDirections(
+                  lat: item.latitude,
+                  lon: item.longitude,
+                  name: item.pharmacyName,
+                  address: item.pharmacyAddress,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.directions_rounded, color: Color(0xFF2563EB), size: 14),
+                      SizedBox(width: 4),
+                      Text('Get Directions', style: TextStyle(color: Color(0xFF2563EB), fontSize: 12, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
-}
 
-class _MedicineItem {
-  const _MedicineItem({
-    required this.medicineId,
-    required this.category,
-    required this.manufacturer,
-    required this.description,
-    required this.stock,
-    required this.expiryDate,
-    required this.phone,
-
-    required this.name,
-    required this.pharmacyName,
-    required this.isAvailable,
-    required this.price,
-    required this.address,
-    required this.latitude,
-    required this.longitude,
-    required this.distanceKm,
-    required this.hasDetails,
-  });
-
-  final String medicineId;
-  final String category;
-  final String manufacturer;
-  final String description;
-  final int stock;
-  final String expiryDate;
-  final String phone;
-
-  final String name;
-  final String pharmacyName;
-  final bool isAvailable;
-  final double? price;
-  final String address;
-  final double? latitude;
-  final double? longitude;
-  final double? distanceKm;
-  final bool hasDetails;  
-
-  String get availabilityText {
-    return isAvailable ? 'Available • In Stock' : 'Not Available • Out of Stock';
+  // ==========================================
+  // SHARED ERROR & EMPTY VIEWS
+  // ==========================================
+  Widget _buildEmptyView(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.search_off_rounded, size: 52, color: Color(0xFF94A3B8)),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF475569),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  String get distanceText {
-    if (distanceKm == null) return 'Nearby pharmacy';
-    return '${distanceKm!.toStringAsFixed(1)} km';
-  }
-
-  String get priceText {
-    if (price == null) return 'Price unavailable';
-    return '₹${price!.toStringAsFixed(0)}';
-  }
-
-  static double? _toDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '');
+  Widget _buildErrorRetryView(String error, VoidCallback onRetry) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFEF4444)),
+            const SizedBox(height: 12),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0284C7),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Retry', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

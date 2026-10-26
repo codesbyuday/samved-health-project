@@ -114,8 +114,11 @@ class ApiConfig {
   static const String labTestTypes = '$apiPrefix/laboratories/test-types';
 
   // Pharmacies & Medicines
+  static const String pharmaciesList = '$apiPrefix/pharmacies/list';
+  static String pharmacyDetails(String providerId) => '$apiPrefix/pharmacies/$providerId';
   static const String medicines = '$apiPrefix/pharmacies/medicines';
   static const String pharmacyStock = '$apiPrefix/pharmacies/stock';
+  static const String medicineAvailability = '$apiPrefix/pharmacies/availability';
 
   // Disease Surveillance & SMC
   static const String publicAnalytics = '$apiPrefix/disease-surveillance/public-analytics';
