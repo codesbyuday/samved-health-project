@@ -37,10 +37,11 @@ export function LoginForm() {
           if (typeof window !== 'undefined') {
             if (res.data.token) {
               localStorage.setItem('USER_SESSION_KEY', res.data.token);
-              document.cookie = `samved_session=${res.data.token}; path=/; max-age=86400`;
+              document.cookie = `samved_session=${res.data.token}; path=/; max-age=86400; SameSite=Lax`;
             }
             if (res.data.user) {
               localStorage.setItem('USER_PROFILE_KEY', JSON.stringify(res.data.user));
+              document.cookie = `smc_user_profile=${encodeURIComponent(JSON.stringify(res.data.user))}; path=/; max-age=86400; SameSite=Lax`;
             }
           }
 

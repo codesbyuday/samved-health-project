@@ -373,6 +373,20 @@ export function SettingsWorkspace({ user }: { user: UserContext }) {
               </div>
 
               <div>
+                <div className="text-muted-foreground font-medium">Contact Phone</div>
+                <div className="text-xs text-foreground mt-0.5">{user.phone ?? "9860001001"}</div>
+              </div>
+
+              <div>
+                <div className="text-muted-foreground font-medium">Account Status</div>
+                <div className="text-xs text-foreground mt-0.5">
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-600 dark:text-emerald-400">
+                    {user.status ?? "active"}
+                  </span>
+                </div>
+              </div>
+
+              <div>
                 <div className="text-muted-foreground font-medium">Email</div>
                 <div className="text-xs text-foreground mt-0.5">{user.email ?? "smc-health@solapurcorporation.gov.in"}</div>
               </div>

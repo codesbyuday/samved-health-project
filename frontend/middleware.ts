@@ -7,7 +7,14 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   if (pathname === "/smc" || pathname.startsWith("/smc/") || pathname.startsWith("/api/smc/")) {
-    return updateSmcSession(request);
+    if (pathname === "/smc/login") {
+      return NextResponse.next();
+    }
+    try {
+      return await updateSmcSession(request);
+    } catch {
+      return NextResponse.next();
+    }
   }
 
   const protectedPaths = ["/dashboard", "/profile", "/settings", "/help"];

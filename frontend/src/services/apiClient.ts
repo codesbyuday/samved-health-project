@@ -1,10 +1,12 @@
 import { USER_SESSION_KEY } from "@/lib/auth";
 
 const getBaseUrl = (): string => {
-  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-    return process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "");
+  let url = process.env.NEXT_PUBLIC_API_BASE_URL || "https://backend-wine-two-70.vercel.app";
+  url = url.trim().replace(/\/$/, "");
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `https://${url}`;
   }
-  return "http://localhost:8000";
+  return url;
 };
 
 export async function apiFetch<T = any>(

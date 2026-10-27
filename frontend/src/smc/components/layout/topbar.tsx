@@ -42,8 +42,10 @@ export function Topbar({ user }: { user: UserContext }) {
             <div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs md:flex">
               <Bell className="h-3.5 w-3.5 text-primary shrink-0" />
               <div>
-                <div className="font-medium leading-tight">{user.name}</div>
-                <div className="text-[10px] text-muted-foreground leading-tight">{user.role}</div>
+                <div className="font-semibold leading-tight">{user.name}</div>
+                <div className="text-[10px] text-muted-foreground leading-tight">
+                  {user.designation || user.role} {user.officialId ? `(${user.officialId})` : ""}
+                </div>
               </div>
             </div>
             <SignOutButton />

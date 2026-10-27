@@ -37,11 +37,12 @@ export function normalizeRole(value: string | null | undefined): OfficialRole {
     return "Ward Officer";
   }
 
-  if (value.toLowerCase().includes("admin")) {
+  const lower = value.toLowerCase();
+  if (lower.includes("admin") || lower.includes("commissioner")) {
     return "SMC Admin";
   }
 
-  if (value.toLowerCase().includes("health")) {
+  if (lower.includes("health")) {
     return "SMC Health Officer";
   }
 

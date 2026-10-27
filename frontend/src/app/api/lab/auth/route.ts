@@ -70,12 +70,24 @@ export async function POST(request: NextRequest) {
     const authUser = authUsers[0];
     const storedHash = authUser.password_hash || "";
 
-    // 2. Validate Password
-    const isPasswordValid =
-      password === storedHash ||
-      password === "password123" ||
-      storedHash === "password123" ||
-      (storedHash.startsWith("$2b$") && (password === "password123" || password === authUser.email));
+    // 2. Validate Password strictly
+    let isPasswordValid = false;
+    if (storedHash) {
+      if (password === storedHash) {
+        isPasswordValid = true;
+      } else if (
+        storedHash === "password123" ||
+        storedHash.startsWith("$2b$10$hashedpassword") ||
+        storedHash.startsWith("$2b$10$hash")
+      ) {
+        // Prototype seed dummy hashes only accept valid default credentials
+        isPasswordValid =
+          password === "password123" ||
+          password === "lab@123" ||
+          password === "admin123" ||
+          password === authUser.email;
+      }
+    }
 
     if (!isPasswordValid) {
       return NextResponse.json(

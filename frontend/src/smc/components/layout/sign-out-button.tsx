@@ -18,6 +18,7 @@ export function SignOutButton() {
         try {
           if (typeof window !== "undefined") {
             document.cookie = "samved_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            document.cookie = "smc_user_profile=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
             localStorage.removeItem("USER_SESSION_KEY");
             localStorage.removeItem("USER_PROFILE_KEY");
           }

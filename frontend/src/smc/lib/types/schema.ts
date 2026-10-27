@@ -7,6 +7,8 @@ export type UserContext = {
   officialId: string | null;
   name: string;
   designation: string | null;
+  phone?: string | null;
+  status?: string | null;
 };
 
 export type SummaryMetric = {
