@@ -337,7 +337,7 @@ const SampleCollection = () => {
       )}
 
       {/* 4 Pipeline Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="lab-grid-4">
         {/* Stage 1 */}
         <div
           onClick={() => setPipelineFilter('awaiting')}

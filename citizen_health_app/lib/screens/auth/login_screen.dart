@@ -67,6 +67,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     runSpacing: 6,
                     children: [
                       ActionChip(
+                        avatar: const Icon(Icons.cloud_done_rounded, size: 16, color: Color(0xFF0284C7)),
+                        label: const Text('Live Backend (Vercel)'),
+                        backgroundColor: const Color(0xFFE0F2FE),
+                        onPressed: () {
+                          setDialogState(() {
+                            urlController.text = ApiConfig.liveProductionUrl;
+                            testResult = null;
+                          });
+                        },
+                      ),
+                      ActionChip(
                         label: const Text('USB adb reverse (127.0.0.1)'),
                         onPressed: () {
                           setDialogState(() {

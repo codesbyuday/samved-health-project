@@ -1,8 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
+  /// Live deployed backend URL on Vercel
+  static const String liveProductionUrl = 'https://backend-wine-two-70.vercel.app';
   static const String defaultLocalhost = 'http://localhost:8000';
   static const String defaultLoopbackIp = 'http://127.0.0.1:8000';
   static const String defaultAndroidEmulator = 'http://10.0.2.2:8000';
@@ -10,32 +11,25 @@ class ApiConfig {
   
   static const String prefBaseUrlKey = 'custom_api_base_url';
 
-  /// Resolves the default backend base URL depending on platform
-  static String get defaultBaseUrl {
-    if (kIsWeb) {
-      return defaultLocalhost;
-    }
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        // On physical devices, 127.0.0.1 works via `adb reverse tcp:8000 tcp:8000`
-        // On emulators, 10.0.2.2 routes to the host machine.
-        return defaultHostLanIp; // Use LAN IP for physical devices or emulators
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.windows:
-      case TargetPlatform.linux:
-      default:
-        return defaultLocalhost;
-    }
-  }
+  /// Resolves the default backend base URL pointing to the live deployed Vercel backend
+  static String get defaultBaseUrl => liveProductionUrl;
 
-  /// Retrieves the active API base URL (customized via settings or platform default)
+  /// Retrieves the active API base URL (customized via settings or live deployed default)
   static Future<String> getBaseUrl() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final customUrl = prefs.getString(prefBaseUrlKey);
       if (customUrl != null && customUrl.trim().isNotEmpty) {
-        return customUrl.trim().replaceAll(RegExp(r'/+$'), '');
+        final clean = customUrl.trim().replaceAll(RegExp(r'/+$'), '');
+        // If the saved custom URL is an old local development URL, automatically use live deployed backend
+        final isOldLocal = clean.contains('localhost') ||
+            clean.contains('127.0.0.1') ||
+            clean.contains('10.0.2.2') ||
+            clean.contains('10.96.78.137') ||
+            clean.contains('172.22.180.106');
+        if (!isOldLocal) {
+          return clean;
+        }
       }
     } catch (_) {}
     return defaultBaseUrl;
@@ -55,7 +49,7 @@ class ApiConfig {
 
     try {
       final uri = Uri.parse('$targetUrl/docs');
-      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode >= 200 && response.statusCode < 400) {
         return {
           'success': true,

@@ -421,7 +421,7 @@ const TestCatalog = () => {
       )}
 
       {/* Catalog Overview Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="lab-grid-4">
         <div className="surface-card rounded-3xl p-5 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-600 dark:bg-cyan-950/60 dark:text-cyan-400">
@@ -585,7 +585,7 @@ const TestCatalog = () => {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="lab-grid-3">
           {filteredCatalog.map((test) => {
             const testName = test.test_types?.test_name || `Test #${test.test_type_id}`;
             const testCat = test.test_types?.test_category || 'General';

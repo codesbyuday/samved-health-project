@@ -90,7 +90,7 @@ const DiseaseSurveillance = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="lab-grid-3">
         {filteredCards.map((card) => (
           <div key={card.disease} className="surface-card rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <div>
