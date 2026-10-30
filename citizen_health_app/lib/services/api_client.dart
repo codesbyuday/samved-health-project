@@ -31,6 +31,24 @@ class ApiClient {
   static const Duration timeoutDuration = Duration(seconds: 25);
   static const String tokenKey = 'auth_token';
 
+  static String _formatNetworkError(dynamic error) {
+    final str = error.toString().toLowerCase();
+    if (str.contains('socketexception') ||
+        str.contains('failed host lookup') ||
+        str.contains('network is unreachable') ||
+        str.contains('no address associated with hostname') ||
+        str.contains('connection refused') ||
+        str.contains('connection reset') ||
+        str.contains('clientexception') ||
+        str.contains('handshakeexception')) {
+      return 'No internet connection. Please check your mobile data or Wi-Fi and try again.';
+    }
+    if (str.contains('timeoutexception') || str.contains('timed out')) {
+      return 'Connection timed out. Please check your internet connection and try again.';
+    }
+    return 'Unable to connect to healthcare server. Please check your internet connection and try again.';
+  }
+
   static Future<Map<String, String>> _buildHeaders({bool requireAuth = true}) async {
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -122,10 +140,10 @@ class ApiClient {
       final response = await http.get(uri, headers: headers).timeout(timeoutDuration);
       return _handleResponse<T>(response, parser);
     } on TimeoutException {
-      return ApiResponse.error('Connection timed out. Please check backend server.');
+      return ApiResponse.error('Connection timed out. Please check your internet connection and try again.');
     } catch (e) {
       debugPrint('ApiClient GET error [$path]: $e');
-      return ApiResponse.error('Network error: $e');
+      return ApiResponse.error(_formatNetworkError(e));
     }
   }
 
@@ -144,10 +162,10 @@ class ApiClient {
       final response = await http.post(uri, headers: headers, body: payload).timeout(timeoutDuration);
       return _handleResponse<T>(response, parser);
     } on TimeoutException {
-      return ApiResponse.error('Connection timed out. Please check backend server.');
+      return ApiResponse.error('Connection timed out. Please check your internet connection and try again.');
     } catch (e) {
       debugPrint('ApiClient POST error [$path]: $e');
-      return ApiResponse.error('Network error: $e');
+      return ApiResponse.error(_formatNetworkError(e));
     }
   }
 
@@ -166,10 +184,10 @@ class ApiClient {
       final response = await http.patch(uri, headers: headers, body: payload).timeout(timeoutDuration);
       return _handleResponse<T>(response, parser);
     } on TimeoutException {
-      return ApiResponse.error('Connection timed out. Please check backend server.');
+      return ApiResponse.error('Connection timed out. Please check your internet connection and try again.');
     } catch (e) {
       debugPrint('ApiClient PATCH error [$path]: $e');
-      return ApiResponse.error('Network error: $e');
+      return ApiResponse.error(_formatNetworkError(e));
     }
   }
 
@@ -186,10 +204,10 @@ class ApiClient {
       final response = await http.delete(uri, headers: headers).timeout(timeoutDuration);
       return _handleResponse<T>(response, parser);
     } on TimeoutException {
-      return ApiResponse.error('Connection timed out. Please check backend server.');
+      return ApiResponse.error('Connection timed out. Please check your internet connection and try again.');
     } catch (e) {
       debugPrint('ApiClient DELETE error [$path]: $e');
-      return ApiResponse.error('Network error: $e');
+      return ApiResponse.error(_formatNetworkError(e));
     }
   }
 }

@@ -27,6 +27,8 @@ class LabReportModel {
 
   bool get isCompleted => status.toLowerCase() == 'completed';
 
+  bool get hasFile => reportFileUrl != null && reportFileUrl!.trim().isNotEmpty;
+
   factory LabReportModel.fromJson(Map<String, dynamic> json) {
     // Handles both FastAPI schema and joined Supabase structure
     String extractedTestName = 'Diagnostic Test';
@@ -37,10 +39,14 @@ class LabReportModel {
     }
 
     String extractedHospitalName = 'Municipal Diagnostic Lab';
-    if (json['hospital_name'] != null && json['hospital_name'].toString().isNotEmpty) {
+    if (json['issuer_name'] != null && json['issuer_name'].toString().isNotEmpty) {
+      extractedHospitalName = json['issuer_name'].toString();
+    } else if (json['hospital_name'] != null && json['hospital_name'].toString().isNotEmpty) {
       extractedHospitalName = json['hospital_name'].toString();
     } else if (json['hospitals'] is Map && json['hospitals']['name'] != null) {
       extractedHospitalName = json['hospitals']['name'].toString();
+    } else if (json['provider'] is Map && json['provider']['name'] != null) {
+      extractedHospitalName = json['provider']['name'].toString();
     }
 
     return LabReportModel(

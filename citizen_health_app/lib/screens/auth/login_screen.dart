@@ -13,13 +13,15 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController mobileController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
+  bool isEmailLogin = false;
   bool showPassword = false;
   bool isPressed = false;
   bool isLoading = false;
 
-  Future<void> _showServerConfigDialog(BuildContext context) async {
+  Future<void> _showServerConfigDialog() async {
     final currentUrl = await ApiConfig.getBaseUrl();
     final urlController = TextEditingController(text: currentUrl);
     String? testResult;
@@ -54,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: urlController,
                     decoration: InputDecoration(
-                      hintText: 'e.g. http://127.0.0.1:8000',
+                      hintText: 'e.g. https://smart-health-ecosystem-backend.vercel.app',
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -178,13 +180,68 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> loginUser(BuildContext context) async {
+  void _toggleLoginMethod(bool toEmail) {
+    if (isEmailLogin == toEmail) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      isEmailLogin = toEmail;
+    });
+  }
+
+  Future<void> loginUser() async {
+    final identifier = isEmailLogin ? emailController.text.trim() : mobileController.text.trim();
+    final password = passwordController.text.trim();
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+
+    if (identifier.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEmailLogin
+                ? "Please enter your email and password"
+                : "Please enter phone number and password",
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    if (isEmailLogin) {
+      final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+      if (!emailRegex.hasMatch(identifier)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please enter a valid email address"),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+    } else {
+      final cleanDigits = identifier.replaceAll(RegExp(r'[\s\-]'), '');
+      final phoneRegex = RegExp(r'^\+?[0-9]{10,13}$');
+      if (!phoneRegex.hasMatch(cleanDigits) ||
+          identifier.contains('@') ||
+          RegExp(r'[a-zA-Z]').hasMatch(identifier)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please enter a valid phone number"),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => isLoading = true);
 
     try {
       final result = await AuthService.login(
-        phone: mobileController.text,
-        password: passwordController.text,
+        email: isEmailLogin ? identifier : null,
+        phone: isEmailLogin ? null : identifier,
+        password: password,
       );
 
       if (!mounted) return;
@@ -208,9 +265,20 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => isLoading = false);
+      final errStr = e.toString().toLowerCase();
+      final isOffline = errStr.contains('socketexception') ||
+          errStr.contains('failed host lookup') ||
+          errStr.contains('network') ||
+          errStr.contains('internet') ||
+          errStr.contains('connection');
+
+      final displayMsg = isOffline
+          ? 'No internet connection. Please check your mobile data or Wi-Fi and try again.'
+          : 'Login error: $e';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Login error: $e"),
+          content: Text(displayMsg),
           duration: const Duration(seconds: 4),
         ),
       );
@@ -220,6 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     mobileController.dispose();
+    emailController.dispose();
     passwordController.dispose();
     super.dispose();
   }
@@ -244,40 +313,39 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             const _AuthBackgroundShapes(),
             SafeArea(
-              child: Stack(
-                children: [
-                  Positioned(
-                    top: 6,
-                    right: 8,
-                    child: IconButton(
-                      icon: const Icon(Icons.settings_ethernet_rounded, color: Colors.white, size: 26),
-                      tooltip: 'Server Settings',
-                      onPressed: () => _showServerConfigDialog(context),
-                    ),
-                  ),
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                    child: Column(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(height: 18),
-                        const Center(
-                          child: _GlassIconBox(
-                            size: 88,
-                            icon: Icons.auto_awesome_rounded,
-                            iconSize: 42,
+                        const SizedBox(width: 44),
+                        const Expanded(
+                          child: Text(
+                            'Welcome Back!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 34,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 28),
-                        const Text(
-                          'Welcome Back!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
+                        IconButton(
+                          icon: const Icon(
+                            Icons.settings_ethernet_rounded,
                             color: Colors.white,
-                            fontSize: 34,
-                            fontWeight: FontWeight.w800,
+                            size: 24,
                           ),
+                          tooltip: 'Server Settings',
+                          onPressed: _showServerConfigDialog,
                         ),
-                    const SizedBox(height: 10),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     const Text(
                       'Sign in to continue your journey',
                       textAlign: TextAlign.center,
@@ -295,13 +363,40 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const _FieldLabel('Phone Number'),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _FieldLabel(isEmailLogin ? 'Email Address' : 'Phone Number'),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: isLoading
+                                    ? null
+                                    : () => _toggleLoginMethod(!isEmailLogin),
+                                child: Text(
+                                  isEmailLogin ? 'Use Phone' : 'Use Email',
+                                  style: const TextStyle(
+                                    color: Color(0xFF7C3AED),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 10),
                           _AuthTextField(
-                            controller: mobileController,
-                            keyboardType: TextInputType.phone,
-                            hintText: 'Enter your phone number',
-                            prefixIcon: Icons.phone_outlined,
+                            key: ValueKey(isEmailLogin ? 'login_email_input' : 'login_phone_input'),
+                            controller: isEmailLogin ? emailController : mobileController,
+                            keyboardType: isEmailLogin ? TextInputType.emailAddress : TextInputType.phone,
+                            textCapitalization: TextCapitalization.none,
+                            autocorrect: false,
+                            hintText: isEmailLogin ? 'Enter your email address' : 'Enter your phone number',
+                            prefixIcon: isEmailLogin ? Icons.mail_outline_rounded : Icons.phone_outlined,
+                            enabled: !isLoading,
                           ),
                           const SizedBox(height: 20),
                           const _FieldLabel('Password'),
@@ -311,6 +406,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             obscureText: !showPassword,
                             hintText: 'Enter your password',
                             prefixIcon: Icons.lock_outline_rounded,
+                            enabled: !isLoading,
                             suffix: IconButton(
                               onPressed: () {
                                 setState(() {
@@ -340,42 +436,32 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 8),
                           GestureDetector(
-                            onTapDown: (_) {
-                              setState(() {
-                                isPressed = true;
-                              });
-                            },
-                            onTapUp: (_) {
-                              setState(() {
-                                isPressed = false;
-                              });
-                            },
+                            onTapDown: isLoading
+                                ? null
+                                : (_) {
+                                    setState(() {
+                                      isPressed = true;
+                                    });
+                                  },
+                            onTapUp: isLoading
+                                ? null
+                                : (_) {
+                                    setState(() {
+                                      isPressed = false;
+                                    });
+                                  },
                             onTapCancel: () {
                               setState(() {
                                 isPressed = false;
                               });
                             },
-                            onTap: () {
-                              if (mobileController.text.isEmpty ||
-                                  passwordController.text.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "Please enter mobile and password",
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                loginUser(context);
-                              }
-                            },
+                            onTap: isLoading ? null : loginUser,
                             child: AnimatedScale(
                               duration: const Duration(milliseconds: 120),
                               scale: isPressed ? 0.98 : 1,
                               child: Container(
                                 width: double.infinity,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 18),
+                                padding: const EdgeInsets.symmetric(vertical: 18),
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     begin: Alignment.centerLeft,
@@ -394,15 +480,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ],
                                 ),
-                                child: const Center(
-                                  child: Text(
-                                    'Sign In',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
+                                child: Center(
+                                  child: isLoading
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Sign In',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),
@@ -441,22 +536,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 22),
                     Row(
-                      children: const [
+                      children: [
                         Expanded(
                           child: _SocialButton(
                             label: 'Google',
-                            icon: _GoogleMark(),
+                            icon: const _GoogleMark(),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Google Sign-In will be available soon. Please use Email or Phone.'),
+                                  duration: Duration(seconds: 3),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                        SizedBox(width: 16),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: _SocialButton(
-                            label: 'Email',
+                            label: isEmailLogin ? 'Phone' : 'Email',
                             icon: Icon(
-                              Icons.mail_outline_rounded,
-                              color: Color(0xFF475569),
+                              isEmailLogin ? Icons.phone_android_rounded : Icons.mail_outline_rounded,
+                              color: const Color(0xFF475569),
                               size: 22,
                             ),
+                            onTap: isLoading ? null : () => _toggleLoginMethod(!isEmailLogin),
                           ),
                         ),
                       ],
@@ -478,7 +582,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => RegisterScreen(),
+                                builder: (context) => const RegisterScreen(),
                               ),
                             );
                           },
@@ -493,22 +597,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    ),
-  ),
-);
-}
+      ),
+    );
+  }
 }
 
 BoxDecoration _glassCardDecoration() {
   return BoxDecoration(
-    color: Colors.white.withOpacity(0.94),
+    color: Colors.white,
     borderRadius: BorderRadius.circular(30),
     border: Border.all(
       color: Colors.white.withOpacity(0.65),
@@ -571,45 +674,6 @@ class _AuthBackgroundShapes extends StatelessWidget {
   }
 }
 
-class _GlassIconBox extends StatelessWidget {
-  const _GlassIconBox({
-    required this.icon,
-    this.size = 72,
-    this.iconSize = 34,
-  });
-
-  final IconData icon;
-  final double size;
-  final double iconSize;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(size * 0.32),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.28),
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x260F172A),
-            blurRadius: 22,
-            offset: Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Icon(
-        icon,
-        color: Colors.white,
-        size: iconSize,
-      ),
-    );
-  }
-}
-
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.text);
 
@@ -630,6 +694,7 @@ class _FieldLabel extends StatelessWidget {
 
 class _AuthTextField extends StatelessWidget {
   const _AuthTextField({
+    super.key,
     required this.controller,
     required this.hintText,
     required this.prefixIcon,
@@ -638,6 +703,9 @@ class _AuthTextField extends StatelessWidget {
     this.suffix,
     this.maxLines = 1,
     this.readOnly = false,
+    this.enabled = true,
+    this.textCapitalization = TextCapitalization.none,
+    this.autocorrect = true,
     this.onTap,
   });
 
@@ -649,16 +717,23 @@ class _AuthTextField extends StatelessWidget {
   final Widget? suffix;
   final int maxLines;
   final bool readOnly;
+  final bool enabled;
+  final TextCapitalization textCapitalization;
+  final bool autocorrect;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
+      key: key,
       controller: controller,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
+      autocorrect: autocorrect,
       obscureText: obscureText,
       maxLines: maxLines,
       readOnly: readOnly,
+      enabled: enabled,
       onTap: onTap,
       decoration: InputDecoration(
         hintText: hintText,
@@ -708,43 +783,49 @@ class _SocialButton extends StatelessWidget {
   const _SocialButton({
     required this.label,
     required this.icon,
+    this.onTap,
   });
 
   final String label;
   final Widget icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.65),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x220F172A),
+                blurRadius: 18,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF374151),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x220F172A),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          icon,
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF374151),
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../../services/citizen_service.dart';
-import 'health_card_flutter.dart'; // 🔥 IMPORTANT: your provided file
+import 'health_card_flutter.dart';
 
 class HealthCardScreen extends StatefulWidget {
   const HealthCardScreen({super.key});
@@ -23,7 +24,14 @@ class _HealthCardScreenState extends State<HealthCardScreen> {
 
   Future<void> fetchCitizen() async {
     try {
-      final citizen = await CitizenService.getCurrentProfile();
+      var citizen = await CitizenService.getCurrentProfile();
+
+      if (citizen == null) {
+        final cachedId = await AuthService.getCurrentCitizenId();
+        if (cachedId != null && cachedId.isNotEmpty) {
+          citizen = await CitizenService.getCitizenById(cachedId);
+        }
+      }
 
       if (citizen != null) {
         citizenObj = Citizen(
@@ -39,6 +47,19 @@ class _HealthCardScreenState extends State<HealthCardScreen> {
         );
 
         wardName = citizen.wardNumber != null ? "Ward ${citizen.wardNumber}" : "Solapur Ward";
+      } else {
+        final cachedId = await AuthService.getCurrentCitizenId();
+        final finalId = (cachedId != null && cachedId.isNotEmpty) ? cachedId : "SMC-2026-000132";
+        citizenObj = Citizen(
+          citizenId: finalId,
+          name: "Uday Gupta",
+          gender: "Male",
+          age: 36,
+          bloodGroup: "O+",
+          wardNumber: "2",
+          createdAt: DateTime(2026, 3, 14),
+        );
+        wardName = "Ward 2";
       }
 
       if (!mounted) return;

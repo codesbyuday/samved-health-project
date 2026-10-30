@@ -53,7 +53,7 @@ class _AuthCheckState extends State<AuthCheck> {
         if (snapshot.data == true) {
           return const MainNavigation();
         } else {
-          return LoginScreen();
+          return const LoginScreen();
         }
       },
     );

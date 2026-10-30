@@ -672,19 +672,99 @@ class LabService {
     return [];
   }
 
-  static Future<String?> getReportFileUrl(String reportId) async {
+  /// Resolves any report file reference (storage path, signed URL, or external link)
+  /// into a fully qualified, authenticated and accessible download/view URL.
+  static Future<String?> resolveReportFileUrl(
+    String reportId, {
+    String? rawFilePath,
+  }) async {
+    // 1. If rawFilePath is already a full web URL, return it directly
+    if (rawFilePath != null && rawFilePath.trim().isNotEmpty) {
+      final trimmed = rawFilePath.trim();
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+    }
+
+    // 2. Try FastAPI backend endpoint first
     try {
       final response = await ApiClient.get<Map<String, dynamic>>(
         '${ApiConfig.labReports}/$reportId/file',
       );
 
       if (response.isSuccess && response.data != null) {
-        return response.data!['file_url']?.toString() ?? response.data!['download_url']?.toString();
+        final url = response.data!['file_url']?.toString() ?? response.data!['download_url']?.toString();
+        if (url != null && (url.startsWith('http://') || url.startsWith('https://'))) {
+          return url;
+        }
+        if (url != null && url.isNotEmpty && (rawFilePath == null || rawFilePath.isEmpty)) {
+          rawFilePath = url;
+        }
       }
     } catch (e) {
       debugPrint('FastAPI getReportFileUrl error: $e');
     }
 
+    // 3. Fallback: resolve path directly via Supabase Storage
+    String path = (rawFilePath ?? '').trim();
+
+    // If path is still empty, look up diagnostic_reports table
+    if (path.isEmpty && reportId.isNotEmpty) {
+      try {
+        final res = await supabase
+            .from('diagnostic_reports')
+            .select('report_file_url')
+            .eq('report_id', reportId)
+            .maybeSingle();
+        final dbPath = res?['report_file_url']?.toString();
+        if (dbPath != null && dbPath.trim().isNotEmpty) {
+          path = dbPath.trim();
+          if (path.startsWith('http://') || path.startsWith('https://')) {
+            return path;
+          }
+        }
+      } catch (e) {
+        debugPrint('Supabase direct query report_file_url error: $e');
+      }
+    }
+
+    if (path.isNotEmpty) {
+      try {
+        String cleanPath = path.replaceFirst(RegExp(r'^/+'), '');
+        String bucket = 'lab_reports';
+        if (cleanPath.startsWith('lab_reports/')) {
+          cleanPath = cleanPath.substring('lab_reports/'.length);
+        } else if (cleanPath.startsWith('lab_document/')) {
+          bucket = 'lab_document';
+          cleanPath = cleanPath.substring('lab_document/'.length);
+        }
+
+        final signedUrl = await supabase.storage.from(bucket).createSignedUrl(cleanPath, 7200);
+        if (signedUrl.isNotEmpty) {
+          return signedUrl;
+        }
+      } catch (e) {
+        debugPrint('Supabase createSignedUrl error: $e');
+        // Try fallback bucket if primary failed
+        try {
+          String cleanPath = path.replaceFirst(RegExp(r'^/+'), '');
+          if (cleanPath.startsWith('lab_reports/')) {
+            cleanPath = cleanPath.substring('lab_reports/'.length);
+          } else if (cleanPath.startsWith('lab_document/')) {
+            cleanPath = cleanPath.substring('lab_document/'.length);
+          }
+          final fallbackUrl = await supabase.storage.from('lab_document').createSignedUrl(cleanPath, 7200);
+          if (fallbackUrl.isNotEmpty) {
+            return fallbackUrl;
+          }
+        } catch (_) {}
+      }
+    }
+
     return null;
+  }
+
+  static Future<String?> getReportFileUrl(String reportId, [String? rawFilePath]) {
+    return resolveReportFileUrl(reportId, rawFilePath: rawFilePath);
   }
 }

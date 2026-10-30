@@ -1,12 +1,13 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'dart:typed_data';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'dart:io';
+import 'package:printing/printing.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 /// Citizen Model - Adjust fields as per your data model
 class Citizen {
@@ -107,8 +108,8 @@ class _HealthCardState extends State<HealthCard> {
 
   /// Get verification URL for QR code
   String get _verificationUrl {
-    // Replace with your actual domain
-    return 'https://your-domain.com/citizen/${widget.citizen.citizenId}/verify';
+    final cleanId = widget.citizen.citizenId.trim();
+    return 'https://samved-health-project.vercel.app/citizen/$cleanId/';
   }
 
   /// Download health card as PDF
@@ -121,7 +122,7 @@ class _HealthCardState extends State<HealthCard> {
     });
 
     try {
-      // 🔥 Ensure widget is rendered
+      // 1. Ensure widget is rendered
       await Future.delayed(const Duration(milliseconds: 300));
 
       final boundary = _cardKey.currentContext?.findRenderObject();
@@ -130,8 +131,8 @@ class _HealthCardState extends State<HealthCard> {
         throw Exception("Card not ready for capture");
       }
 
-      // 🔥 VERY SAFE pixel ratio
-      final image = await boundary.toImage(pixelRatio: 1.8);
+      // 2. High-res card image capture (85.6 x 54 mm ID-1)
+      final image = await boundary.toImage(pixelRatio: 2.5);
 
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
@@ -141,7 +142,7 @@ class _HealthCardState extends State<HealthCard> {
 
       final pngBytes = byteData.buffer.asUint8List();
 
-      // 🔥 Create PDF
+      // 3. Create PDF matching standard ID-1 card dimensions (85.6 * 54.0 mm)
       final pdf = pw.Document();
 
       final imageProvider = pw.MemoryImage(pngBytes);
@@ -150,34 +151,71 @@ class _HealthCardState extends State<HealthCard> {
         pw.Page(
           pageFormat: const PdfPageFormat(
             85.6 * PdfPageFormat.mm,
-            54 * PdfPageFormat.mm,
+            54.0 * PdfPageFormat.mm,
           ),
+          margin: pw.EdgeInsets.zero,
           build: (context) {
-            return pw.Center(
-              child: pw.Image(imageProvider),
+            return pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Image(imageProvider, fit: pw.BoxFit.cover),
             );
           },
         ),
       );
 
-      // 🔥 Save file
-      final directory = Directory('/storage/emulated/0/Download');
+      final pdfBytes = await pdf.save();
+      final filename = 'HealthCard_${widget.citizen.citizenId}.pdf';
 
-      if (!await directory.exists()) {
-        await directory.create(recursive: true);
+      bool directSaved = false;
+
+      // Safe attempt 1: Try public Downloads folder if accessible
+      try {
+        final directory = Directory('/storage/emulated/0/Download');
+        if (await directory.exists()) {
+          final file = File('${directory.path}/$filename');
+          await file.writeAsBytes(pdfBytes);
+          directSaved = true;
+        }
+      } catch (e) {
+        debugPrint("Direct public storage write skipped: $e");
       }
 
-      final file = File(
-        '${directory.path}/HealthCard_${widget.citizen.citizenId}.pdf',
-      );
+      // Safe attempt 2: Local app documents directory
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final localFile = File('${appDir.path}/$filename');
+        await localFile.writeAsBytes(pdfBytes);
+      } catch (e) {
+        debugPrint("Local doc write error: $e");
+      }
 
-      await file.writeAsBytes(await pdf.save());
+      // Safe attempt 3: System Share & Save Dialog
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: filename,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved: ${file.path}'),
-            backgroundColor: Colors.green,
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    directSaved
+                        ? 'Health card saved to Downloads!'
+                        : 'Health Card PDF ready to save or open',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF16A34A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -187,7 +225,7 @@ class _HealthCardState extends State<HealthCard> {
 
       if (!mounted) return;
       setState(() {
-        _downloadError = "Download failed. Try again.";
+        _downloadError = "Download failed. Please try again.";
       });
 
     } finally {
@@ -196,6 +234,238 @@ class _HealthCardState extends State<HealthCard> {
         _isDownloading = false;
       });
     }
+  }
+
+  void _showAnimatedQr(BuildContext context) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Health Card QR Code',
+      barrierColor: Colors.black.withOpacity(0.6),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (ctx, anim1, anim2) => const SizedBox.shrink(),
+      transitionBuilder: (ctx, anim1, anim2, child) {
+        final curveValue = Curves.easeOutBack.transform(anim1.value);
+        return Transform.scale(
+          scale: curveValue,
+          child: Opacity(
+            opacity: anim1.value,
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 25,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Color(0xFF1565C0),
+                                Color(0xFF1E88E5),
+                                Color(0xFF42A5F5),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.qr_code_2_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Digital Health QR',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Official SMC Health ID',
+                                      style: TextStyle(
+                                        color: Color(0xD9FFFFFF),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(22),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: const Color(0xFF1565C0).withOpacity(0.12),
+                                      child: const Icon(
+                                        Icons.person_rounded,
+                                        color: Color(0xFF1565C0),
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            widget.citizen.name ?? 'Citizen',
+                                            style: const TextStyle(
+                                              color: Color(0xFF0F172A),
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Health ID: ${widget.citizen.citizenId}',
+                                            style: const TextStyle(
+                                              color: Color(0xFF1E40AF),
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x10000000),
+                                      blurRadius: 16,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: QrImageView(
+                                  data: _verificationUrl,
+                                  version: QrVersions.auto,
+                                  size: 200,
+                                  padding: EdgeInsets.zero,
+                                  gapless: true,
+                                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              const Text(
+                                'Scan with any smartphone camera to verify records',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Text(
+                                  _verificationUrl,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Color(0xFF0284C7),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1565C0),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: const Text(
+                                    'Close',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -210,9 +480,11 @@ class _HealthCardState extends State<HealthCard> {
         // ═══════════════════════════════════════
         // THE CARD (ID-1 Standard: 86 × 54 mm)
         // ════════════════════════════════════════
-        RepaintBoundary(
-          key: _cardKey,
-          child: Container(
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: RepaintBoundary(
+            key: _cardKey,
+            child: Container(
             width: _cardWidth,
             height: _cardHeight,
             decoration: BoxDecoration(
@@ -373,84 +645,92 @@ class _HealthCardState extends State<HealthCard> {
                               // Details Column (50%)
                               Expanded(
                                 flex: 50,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Name
-                                    _buildDetailRow(
-                                      label: 'Name:',
-                                      value: widget.citizen.name ?? 'N/A',
-                                      valueBold: true,
-                                      valueSize: _cardWidth * 0.032,
-                                    ),
-                                    const SizedBox(height: 2),
-
-                                    // Age / Gender
-                                    _buildDetailRow(
-                                      label: 'Age/Gender:',
-                                      value: '${age ?? 'N/A'} / ${widget.citizen.gender?.substring(0, 1) ?? '?'}',
-                                    ),
-                                    const SizedBox(height: 2),
-
-                                    // Blood Group
-                                    _buildDetailRow(
-                                      label: 'Blood:',
-                                      value: widget.citizen.bloodGroup ?? 'N/A',
-                                    ),
-                                    const SizedBox(height: 2),
-
-                                    // Ward
-                                    _buildDetailRow(
-                                      label: 'Ward:',
-                                      value: widget.wardName,
-                                    ),
-                                    const SizedBox(height: 2),
-
-                                    // Health ID
-                                    Container(
-                                      margin: const EdgeInsets.only(top: 2),
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1e40af).withOpacity(0.08),
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            'Health ID: ',
-                                            style: TextStyle(
-                                              color: const Color(0xFF1e40af),
-                                              fontSize: _cardWidth * 0.027,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          Text(
-                                            widget.citizen.citizenId,
-                                            style: TextStyle(
-                                              color: const Color(0xFF1e3a8a),
-                                              fontSize: _cardWidth * 0.028,
-                                              fontWeight: FontWeight.w800,
-                                              fontFamily: 'Courier',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    // Issue Date
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        'Issue: $issueDate',
-                                        style: TextStyle(
-                                          fontSize: _cardWidth * 0.022,
-                                          color: const Color(0xFF64748b),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: SizedBox(
+                                    width: _cardWidth * 0.48,
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Name
+                                        _buildDetailRow(
+                                          label: 'Name:',
+                                          value: widget.citizen.name ?? 'N/A',
+                                          valueBold: true,
+                                          valueSize: _cardWidth * 0.032,
                                         ),
-                                      ),
+                                        const SizedBox(height: 2),
+
+                                        // Age / Gender
+                                        _buildDetailRow(
+                                          label: 'Age/Gender:',
+                                          value: '${age ?? 'N/A'} / ${widget.citizen.gender?.substring(0, 1) ?? '?'}',
+                                        ),
+                                        const SizedBox(height: 2),
+
+                                        // Blood Group
+                                        _buildDetailRow(
+                                          label: 'Blood:',
+                                          value: widget.citizen.bloodGroup ?? 'N/A',
+                                        ),
+                                        const SizedBox(height: 2),
+
+                                        // Ward
+                                        _buildDetailRow(
+                                          label: 'Ward:',
+                                          value: widget.wardName,
+                                        ),
+                                        const SizedBox(height: 2),
+
+                                        // Health ID
+                                        Container(
+                                          margin: const EdgeInsets.only(top: 2),
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF1e40af).withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(3),
+                                          ),
+                                          child: Text.rich(
+                                            TextSpan(
+                                              text: 'Health ID: ',
+                                              style: TextStyle(
+                                                color: const Color(0xFF1e40af),
+                                                fontSize: _cardWidth * 0.027,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                              children: [
+                                                TextSpan(
+                                                  text: widget.citizen.citizenId,
+                                                  style: TextStyle(
+                                                    color: const Color(0xFF1e3a8a),
+                                                    fontSize: _cardWidth * 0.028,
+                                                    fontWeight: FontWeight.w800,
+                                                    fontFamily: 'Courier',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+
+                                        // Issue Date
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text(
+                                            'Issue: $issueDate',
+                                            style: TextStyle(
+                                              fontSize: _cardWidth * 0.022,
+                                              color: const Color(0xFF64748b),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
 
@@ -459,35 +739,46 @@ class _HealthCardState extends State<HealthCard> {
                               // QR Code Column (27%)
                               Expanded(
                                 flex: 27,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    // QR Code
-                                    Container(
-                                      padding: const EdgeInsets.all(3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: const Color(0xFFcbd5e1)),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      // QR Code
+                                      GestureDetector(
+                                        onTap: () => _showAnimatedQr(context),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: const Color(0xFFcbd5e1),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: QrImageView(
+                                            data: _verificationUrl,
+                                            version: QrVersions.auto,
+                                            size: _cardWidth * 0.17,
+                                            padding: EdgeInsets.zero,
+                                            gapless: true,
+                                            errorCorrectionLevel: QrErrorCorrectLevel.M,
+                                          ),
+                                        ),
                                       ),
-                                      child: QrImageView(
-                                        data: _verificationUrl,
-                                        version: QrVersions.auto,
-                                        size: _cardWidth * 0.17,
-                                        errorCorrectionLevel: QrErrorCorrectLevel.M,
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'Scan for Records',
+                                        style: TextStyle(
+                                          fontSize: _cardWidth * 0.02,
+                                          color: const Color(0xFF64748b),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        textAlign: TextAlign.center,
                                       ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      'Scan for Records',
-                                      style: TextStyle(
-                                        fontSize: _cardWidth * 0.02,
-                                        color: const Color(0xFF64748b),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -543,6 +834,7 @@ class _HealthCardState extends State<HealthCard> {
               ),
             ),
           ),
+        ),
         ),
 
         const SizedBox(height: 20),
@@ -642,11 +934,10 @@ class _HealthCardState extends State<HealthCard> {
     double? valueSize,
   }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: _cardWidth * 0.12,
+          width: _cardWidth * 0.14,
           child: Text(
             label,
             style: TextStyle(
@@ -664,6 +955,7 @@ class _HealthCardState extends State<HealthCard> {
               fontSize: valueSize ?? _cardWidth * 0.029,
               fontWeight: valueBold ? FontWeight.w700 : FontWeight.normal,
             ),
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
