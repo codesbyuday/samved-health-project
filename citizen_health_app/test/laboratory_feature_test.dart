@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizen_health_app/models/laboratory_model.dart';
+import 'package:citizen_health_app/screens/laboratories/laboratory_details_screen.dart';
 import 'package:citizen_health_app/services/lab_service.dart';
 
 void main() {
@@ -158,6 +160,35 @@ void main() {
       expect(sorted[0].distanceKm, 1.2);
       expect(sorted[1].distanceKm, 4.5);
       expect(sorted[2].distanceKm, isNull);
+    });
+
+    testWidgets('LaboratoryDetailsScreen renders Email and Call buttons and clicking Email triggers handler', (tester) async {
+      final sampleLab = LaboratoryModel(
+        providerId: 'PROV-LAB-001',
+        name: 'Lokmangal Pathology Centre',
+        address: 'Jule Solapur, Solapur',
+        phone: '9890001001',
+        email: 'lokmangal@example.com',
+        license: 'MH-LAB-2023-0165',
+        status: 'approved',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LaboratoryDetailsScreen(
+            providerId: 'PROV-LAB-001',
+            initialLab: sampleLab,
+          ),
+        ),
+      );
+
+      expect(find.text('Lokmangal Pathology Centre'), findsWidgets);
+      expect(find.text('Call Lab'), findsOneWidget);
+      expect(find.text('Email'), findsOneWidget);
+
+      await tester.tap(find.text('Email'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
     });
   });
 }

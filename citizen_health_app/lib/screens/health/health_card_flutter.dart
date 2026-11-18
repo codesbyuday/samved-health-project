@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -166,55 +167,100 @@ class _HealthCardState extends State<HealthCard> {
       final pdfBytes = await pdf.save();
       final filename = 'HealthCard_${widget.citizen.citizenId}.pdf';
 
-      bool directSaved = false;
+      String? savedLocation;
 
-      // Safe attempt 1: Try public Downloads folder if accessible
+      // 1. Native MediaStore on Android -> saves directly to user's public Downloads directory
       try {
-        final directory = Directory('/storage/emulated/0/Download');
-        if (await directory.exists()) {
-          final file = File('${directory.path}/$filename');
-          await file.writeAsBytes(pdfBytes);
-          directSaved = true;
-        }
+        const channel = MethodChannel('com.example.citizen_health_app/file_saver');
+        savedLocation = await channel.invokeMethod<String>('saveToDownloads', {
+          'filename': filename,
+          'bytes': pdfBytes,
+          'mimeType': 'application/pdf',
+        });
       } catch (e) {
-        debugPrint("Direct public storage write skipped: $e");
+        debugPrint("Native MediaStore save skipped or failed: $e");
       }
 
-      // Safe attempt 2: Local app documents directory
-      try {
+      // 2. Direct public storage write to /storage/emulated/0/Download
+      if (savedLocation == null) {
+        try {
+          final directory = Directory('/storage/emulated/0/Download');
+          if (await directory.exists()) {
+            final file = File('${directory.path}/$filename');
+            await file.writeAsBytes(pdfBytes);
+            savedLocation = 'Downloads/$filename';
+          }
+        } catch (e) {
+          debugPrint("Direct public storage write skipped: $e");
+        }
+      }
+
+      // 3. Fallback: getDownloadsDirectory
+      if (savedLocation == null) {
+        try {
+          final dir = await getDownloadsDirectory();
+          if (dir != null) {
+            final file = File('${dir.path}/$filename');
+            await file.writeAsBytes(pdfBytes);
+            savedLocation = file.path;
+          }
+        } catch (e) {
+          debugPrint("getDownloadsDirectory skipped: $e");
+        }
+      }
+
+      // 4. Fallback: getExternalStorageDirectory
+      if (savedLocation == null) {
+        try {
+          final extDir = await getExternalStorageDirectory();
+          if (extDir != null) {
+            final file = File('${extDir.path}/$filename');
+            await file.writeAsBytes(pdfBytes);
+            savedLocation = file.path;
+          }
+        } catch (e) {
+          debugPrint("External storage write skipped: $e");
+        }
+      }
+
+      // 5. Fallback: getApplicationDocumentsDirectory
+      if (savedLocation == null) {
         final appDir = await getApplicationDocumentsDirectory();
         final localFile = File('${appDir.path}/$filename');
         await localFile.writeAsBytes(pdfBytes);
-      } catch (e) {
-        debugPrint("Local doc write error: $e");
+        savedLocation = localFile.path;
       }
-
-      // Safe attempt 3: System Share & Save Dialog
-      await Printing.sharePdf(
-        bytes: pdfBytes,
-        filename: filename,
-      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    directSaved
-                        ? 'Health card saved to Downloads!'
-                        : 'Health Card PDF ready to save or open',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Health card saved successfully!',
+                        style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 14),
+                      ),
+                      Text(
+                        'Saved to: ${savedLocation ?? "Downloads/$filename"}',
+                        style: const TextStyle(color: Color(0xFFDCFCE7), fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
             backgroundColor: const Color(0xFF16A34A),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             duration: const Duration(seconds: 4),
           ),
         );

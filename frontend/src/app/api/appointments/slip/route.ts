@@ -54,32 +54,105 @@ function formatDate(value: string) {
 
 async function getAppointmentData(appointmentId: string): Promise<AppointmentSlipData | null> {
   try {
-    const { apiClient } = await import("@/services/apiClient");
-    const res = await apiClient.get<any[]>(`/appointments`);
-    const appointments = res.data || [];
-    const appointment = appointments.find((a: any) => a.appointment_id === appointmentId);
+    let appointment: any = null;
+
+    if (supabaseServer) {
+      const { data: aptData } = await supabaseServer
+        .from("appointments")
+        .select("*")
+        .eq("appointment_id", appointmentId)
+        .maybeSingle();
+
+      if (aptData) {
+        appointment = aptData;
+      }
+    }
+
+    if (!appointment) {
+      try {
+        const { apiClient } = await import("@/services/apiClient");
+        const res = await apiClient.get<any[]>(`/appointments`);
+        const appointments = res.data || [];
+        appointment = appointments.find((a: any) => a.appointment_id === appointmentId);
+      } catch (e) {
+        console.error("apiClient fallback failed in getAppointmentData:", e);
+      }
+    }
 
     if (!appointment) {
       return null;
     }
 
-    const citizen = appointment.citizens || {};
-    const hospital = appointment.hospitals || {};
-    const hospitalWard = appointment.hospital_wards || {};
+    // Resolve citizen details
+    let citizen: any = appointment.citizen || appointment.citizens || {};
+    if (appointment.citizen_id && supabaseServer) {
+      const { data: citData } = await supabaseServer
+        .from("citizens")
+        .select("*, wards(*)")
+        .eq("citizen_id", appointment.citizen_id)
+        .maybeSingle();
+      if (citData) {
+        citizen = { ...citData, ...citizen };
+      }
+    }
+
+    // Resolve hospital details
+    let hospital: any = appointment.hospital || appointment.hospitals || {};
+    if (appointment.hospital_id && supabaseServer) {
+      const { data: hospData } = await supabaseServer
+        .from("hospitals")
+        .select("*")
+        .eq("hospital_id", appointment.hospital_id)
+        .maybeSingle();
+      if (hospData) {
+        hospital = { ...hospData, ...hospital };
+      }
+    }
+
+    // Resolve doctor details
+    let doctor: any = appointment.doctor_staff || appointment.doctor || {};
+    if (appointment.doctor_id && supabaseServer) {
+      const { data: staffData } = await supabaseServer
+        .from("hospital_staff")
+        .select("*")
+        .or(`staff_uuid.eq.${appointment.doctor_id},staff_id.eq.${appointment.doctor_id}`)
+        .maybeSingle();
+      if (staffData) {
+        doctor = { ...staffData, ...doctor };
+      } else {
+        const { data: docData } = await supabaseServer
+          .from("doctors")
+          .select("*")
+          .eq("doctor_id", appointment.doctor_id)
+          .maybeSingle();
+        if (docData) {
+          doctor = { ...docData, ...doctor };
+        }
+      }
+    }
+
+    const hospitalWard = appointment.hospital_ward || appointment.hospital_wards || {};
+
+    const citizenAddress = citizen.address || 
+      (citizen.ward_number ? `Ward ${citizen.ward_number}, Solapur` : (citizen.wards?.ward_name ? `${citizen.wards.ward_name}, Solapur` : "Solapur"));
+
+    const doctorName = doctor.name || (appointment.doctor_id ? "Dr. Specialist" : "Dr. Specialist (Duty Medical Officer)");
+    const doctorSpecialization = doctor.specialization || doctor.department || "General Medicine";
+    const departmentName = doctor.department || hospitalWard.ward_name || "General OPD";
 
     return {
       appointment_id: safeValue(appointment.appointment_id),
       citizen_id: safeValue(appointment.citizen_id),
-      citizen_name: safeValue(citizen.name),
-      citizen_phone: safeValue(citizen.phone),
-      citizen_gender: safeValue(citizen.gender),
-      citizen_address: safeValue(citizen.address),
-      doctor_name: safeValue(appointment.doctor_id || "Duty Medical Officer"),
-      doctor_specialization: "General Medicine",
-      hospital_name: safeValue(hospital.name || "Surat Civil Hospital"),
-      hospital_address: safeValue(hospital.address || "Surat, Gujarat"),
-      hospital_contact: safeValue(hospital.contact_number || "0261-2244111"),
-      department_name: safeValue(hospitalWard.ward_name || "General Ward"),
+      citizen_name: safeValue(citizen.name || "N/A"),
+      citizen_phone: safeValue(citizen.phone || "N/A"),
+      citizen_gender: safeValue(citizen.gender || "N/A"),
+      citizen_address: safeValue(citizenAddress),
+      doctor_name: safeValue(doctorName),
+      doctor_specialization: safeValue(doctorSpecialization),
+      hospital_name: safeValue(hospital.name || "Solapur Civil Hospital"),
+      hospital_address: safeValue(hospital.address || "Solapur, Maharashtra"),
+      hospital_contact: safeValue(hospital.contact_number || "0217-2745555"),
+      department_name: safeValue(departmentName),
       appointment_date: safeValue(appointment.appointment_date),
       time_slot: safeValue(appointment.time_slot),
       token_id: appointment.token_id || 1,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/laboratory_model.dart';
 import '../../services/lab_service.dart';
@@ -35,8 +36,13 @@ class _LaboratoryDetailsScreenState extends State<LaboratoryDetailsScreen> {
   void initState() {
     super.initState();
     _laboratory = widget.initialLab;
+    if (_laboratory != null) {
+      _isLoading = false;
+      _allTests = _laboratory!.tests;
+      _filteredTests = List.from(_allTests);
+    }
     _searchController.addListener(_filterCatalogue);
-    _loadLaboratoryProfile();
+    _loadLaboratoryProfile(isBackgroundRefresh: _laboratory != null);
   }
 
   @override
@@ -46,11 +52,13 @@ class _LaboratoryDetailsScreenState extends State<LaboratoryDetailsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadLaboratoryProfile() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _loadLaboratoryProfile({bool isBackgroundRefresh = false}) async {
+    if (!isBackgroundRefresh) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final lab = await LabService.getLaboratoryProfile(
@@ -68,7 +76,7 @@ class _LaboratoryDetailsScreenState extends State<LaboratoryDetailsScreen> {
           _isLoading = false;
         });
         _filterCatalogue();
-      } else {
+      } else if (!isBackgroundRefresh) {
         setState(() {
           _isLoading = false;
           _errorMessage = 'Could not load laboratory profile. Please try again.';
@@ -76,10 +84,12 @@ class _LaboratoryDetailsScreenState extends State<LaboratoryDetailsScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Error loading laboratory details: $e';
-      });
+      if (!isBackgroundRefresh) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Error loading laboratory details: $e';
+        });
+      }
     }
   }
 
@@ -110,13 +120,92 @@ class _LaboratoryDetailsScreenState extends State<LaboratoryDetailsScreen> {
     return set;
   }
 
+  Future<void> _handleEmailAction(String email) async {
+    final cleanEmail = email.trim();
+    if (cleanEmail.isEmpty) return;
+
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: cleanEmail,
+      queryParameters: {
+        'subject': 'Inquiry regarding Diagnostic Services - Solapur Municipal Corporation',
+      },
+    );
+
+    bool launched = false;
+    try {
+      // 1. Attempt launching via external email application (e.g. Gmail, Outlook)
+      launched = await launchUrl(
+        emailUri,
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (e) {
+      debugPrint('Launch email application error: $e');
+    }
+
+    if (!launched) {
+      try {
+        launched = await launchUrl(
+          emailUri,
+          mode: LaunchMode.platformDefault,
+        );
+      } catch (_) {}
+    }
+
+    // 2. If no mail app is installed/configured (e.g. on Android emulator),
+    // copy the email address to clipboard and inform the user
+    if (!launched) {
+      await Clipboard.setData(ClipboardData(text: cleanEmail));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No mail app available. Lab email copied to clipboard:\n$cleanEmail',
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF0284C7),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _launchUrlHelper(String urlStr) async {
     final uri = Uri.parse(urlStr);
+    bool launched = false;
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Launch URL error: $e');
+    }
+
+    if (!launched && urlStr.startsWith('tel:')) {
+      final phone = urlStr.replaceFirst('tel:', '');
+      await Clipboard.setData(ClipboardData(text: phone));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Phone number copied to clipboard: $phone'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _openDirections({
@@ -461,7 +550,7 @@ class _LaboratoryDetailsScreenState extends State<LaboratoryDetailsScreen> {
                             if (lab.email != null && lab.email!.isNotEmpty)
                               Expanded(
                                 child: OutlinedButton.icon(
-                                  onPressed: () => _launchUrlHelper('mailto:${lab.email}'),
+                                  onPressed: () => _handleEmailAction(lab.email!),
                                   icon: const Icon(Icons.mail_outline_rounded, size: 15, color: Color(0xFF64748B)),
                                   label: const FittedBox(
                                     fit: BoxFit.scaleDown,

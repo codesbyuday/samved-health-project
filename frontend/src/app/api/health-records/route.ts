@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedStaffProfile, getSessionUserId } from "@/lib/server-auth";
-import { apiClient } from "@/services/apiClient";
+import { supabaseServer } from "@/lib/supabase-server";
 
 export async function POST(request: NextRequest) {
   const userId = getSessionUserId(request);
@@ -23,18 +23,56 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Citizen and diagnosis are required" }, { status: 400 });
   }
 
-  const res = await apiClient.post<any>("/laboratories/reports", {
-    citizen_id: citizenId,
-    hospital_id: user.hospital_id || "HOSP001",
-    result: diagnosis,
-    description: body.prescription || body.notes || "Health Record Entry",
-    status: "completed",
-    test_date: body.visit_date || new Date().toISOString().split("T")[0]
-  });
+  const hospitalId = user.hospital_id || body.hospital_id || "HOSP001";
+  const staffUuid = user.staff_uuid || user.staff_id;
 
-  if (res.error) {
-    return NextResponse.json({ success: false, error: res.error }, { status: 500 });
+  try {
+    const { data: record, error: insertError } = await supabaseServer
+      .from("health_records")
+      .insert({
+        citizen_id: citizenId,
+        hospital_id: hospitalId,
+        staff_id: staffUuid,
+        diagnosis: diagnosis,
+        prescription: body.prescription?.trim() || null,
+        notes: body.notes?.trim() || null,
+        visit_date: body.visit_date || new Date().toISOString().split("T")[0],
+      })
+      .select("*, hospitals(*), hospital_staff(*)")
+      .single();
+
+    if (insertError) {
+      console.error("Error creating health record:", insertError);
+      return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
+    }
+
+    if (Array.isArray(body.reportedDiseases) && body.reportedDiseases.length > 0) {
+      const diseaseCases = body.reportedDiseases.map((d: any) => ({
+        hospital_id: hospitalId,
+        citizen_id: citizenId,
+        disease_id: d.disease_id,
+        report_date: body.visit_date || new Date().toISOString().split("T")[0],
+        severity: d.severity || "moderate",
+        status: d.status || "active",
+        reported_by: staffUuid,
+        health_record_id: record?.record_id || null,
+      }));
+
+      const { error: diseaseError } = await supabaseServer
+        .from("disease_cases")
+        .insert(diseaseCases);
+
+      if (diseaseError) {
+        console.error("Error creating disease cases:", diseaseError);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: record });
+  } catch (err: any) {
+    console.error("Unexpected error creating health record:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Internal server error" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ success: true, data: res.data });
 }

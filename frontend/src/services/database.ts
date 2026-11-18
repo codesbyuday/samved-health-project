@@ -1299,8 +1299,27 @@ export const vaccinationRecordService = {
 };
 
 export const healthRecordService = {
-  async getAll(): Promise<{ data: any[] | null; error: string | null }> {
-    return apiClient.get<any[]>('/laboratories/reports');
+  async getAll(): Promise<{ data: HealthRecord[] | null; error: string | null }> {
+    try {
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('health_records')
+          .select('*, hospitals(*), hospital_staff(*)')
+          .order('visit_date', { ascending: false });
+        if (!error && data) {
+          const records = data.map((h: any) => ({
+            ...h,
+            hospital: h.hospitals as Hospital,
+            staff: h.hospital_staff as HospitalStaff,
+            doctor: h.hospital_staff as HospitalStaff,
+          })) as HealthRecord[];
+          return { data: records, error: null };
+        }
+      }
+      return { data: [], error: null };
+    } catch (err: any) {
+      return { data: null, error: parseErrorMessage(err) };
+    }
   },
   async getByCitizen(citizenId: string): Promise<{ data: HealthRecord[] | null; error: string | null }> {
     try {

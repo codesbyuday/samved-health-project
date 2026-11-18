@@ -778,6 +778,11 @@ export default function PatientRecords({ initialCitizen }: PatientRecordsProps =
 
       toast.success('Treatment record added successfully');
       setShowTreatmentDialog(false);
+      setDiagnosis('');
+      setPrescription('');
+      setTreatmentNotes('');
+      setReportedDiseases([]);
+      setTreatmentTab('health-record');
       loadCitizenData(selectedCitizen.citizen_id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to add treatment record');
@@ -2067,7 +2072,19 @@ export default function PatientRecords({ initialCitizen }: PatientRecordsProps =
       </Dialog>
 
       {/* Add Treatment Record Dialog */}
-      <Dialog open={showTreatmentDialog} onOpenChange={setShowTreatmentDialog}>
+      <Dialog
+        open={showTreatmentDialog}
+        onOpenChange={(open) => {
+          setShowTreatmentDialog(open);
+          if (!open) {
+            setDiagnosis('');
+            setPrescription('');
+            setTreatmentNotes('');
+            setReportedDiseases([]);
+            setTreatmentTab('health-record');
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Add Treatment Record</DialogTitle>
