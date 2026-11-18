@@ -37,87 +37,98 @@ class AuthService:
             return True, token, user_profile, None
 
         # Strategy 1.5: Dedicated Strict SMC Official Authentication Flow
-        if req.portal == "smc" or identifier.endswith("@smc.gov.in") or identifier.startswith("SMC-") or identifier.startswith("smc-"):
+        # Only enforce SMC official requirement if:
+        # 1. The user explicitly targets the SMC portal (req.portal == "smc"), OR
+        # 2. The identifier is an SMC official ID (e.g. SMC-OFF-001)
+        # Note: Hospital staff also have @smc.gov.in emails (e.g. dr.chavan.hospital@smc.gov.in).
+        # They should NOT be blocked here unless logging into the SMC portal!
+        is_smc_portal = req.portal == "smc"
+        is_official_id = identifier.upper().startswith("SMC-OFF") or identifier.upper().startswith("SMC-ADM") or identifier.upper().startswith("SMC-HLT") or identifier.upper().startswith("SMC-WRD")
+
+        if is_smc_portal or is_official_id:
             # 1. Locate user in auth_users by email or phone
             users = await supabase_http_client.select("auth_users", {"email": f"eq.{identifier}"})
             if not users:
                 users = await supabase_http_client.select("auth_users", {"phone": f"eq.{identifier}"})
 
             # Check if identifier is an official_id (e.g. SMC-OFF-001)
-            if not users and (identifier.startswith("SMC-") or identifier.startswith("smc-")):
+            if not users and is_official_id:
                 smc_by_id = await supabase_http_client.select("smc_officials", {"official_id": f"eq.{identifier.upper()}"})
                 if smc_by_id and smc_by_id[0].get("user_id"):
                     users = await supabase_http_client.select("auth_users", {"id": f"eq.{smc_by_id[0]['user_id']}"})
 
-            if not users:
+            if is_smc_portal and not users:
                 return False, None, None, "No registered SMC official account found with this email or official ID."
 
-            user = users[0]
-            user_role = user.get("role", "")
-            if user_role not in ("smc_official", "smc_admin", "commissioner", "health_officer"):
-                return False, None, None, "Access denied: This user account is not authorized as an SMC municipal official."
+            if users:
+                user = users[0]
+                user_role = user.get("role", "")
+                if user_role not in ("smc_official", "smc_admin", "commissioner", "health_officer"):
+                    if is_smc_portal:
+                        return False, None, None, "Access denied: This user account is not authorized as an SMC municipal official."
+                    # If not explicitly on smc portal, fall through to Strategy 2 (e.g. hospital_staff)
+                else:
+                    # 2. Strict Password Validation
+                    stored_hash = user.get("password_hash") or ""
+                    is_valid_pwd = False
+                    if stored_hash:
+                        if verify_password(password, stored_hash) or password == stored_hash:
+                            is_valid_pwd = True
+                        elif stored_hash.startswith("$2b$10$hashedpassword") or stored_hash.startswith("$2b$10$hash") or stored_hash == "password123":
+                            is_valid_pwd = password in ("password123", "smc@123", "admin123", "commissioner123", "official123")
 
-            # 2. Strict Password Validation
-            stored_hash = user.get("password_hash") or ""
-            is_valid_pwd = False
-            if stored_hash:
-                if verify_password(password, stored_hash) or password == stored_hash:
-                    is_valid_pwd = True
-                elif stored_hash.startswith("$2b$10$hashedpassword") or stored_hash.startswith("$2b$10$hash") or stored_hash == "password123":
-                    is_valid_pwd = password in ("password123", "smc@123", "admin123", "commissioner123", "official123")
+                    if not is_valid_pwd:
+                        return False, None, None, "Incorrect password. Please verify your credentials."
 
-            if not is_valid_pwd:
-                return False, None, None, "Incorrect password. Please verify your credentials."
+                    # 3. Query smc_officials table by user_id or phone
+                    officials = await supabase_http_client.select("smc_officials", {"user_id": f"eq.{user['id']}"})
+                    if not officials and user.get("phone"):
+                        officials = await supabase_http_client.select("smc_officials", {"phone": f"eq.{user['phone']}"})
 
-            # 3. Query smc_officials table by user_id or phone
-            officials = await supabase_http_client.select("smc_officials", {"user_id": f"eq.{user['id']}"})
-            if not officials and user.get("phone"):
-                officials = await supabase_http_client.select("smc_officials", {"phone": f"eq.{user['phone']}"})
+                    if not officials:
+                        return False, None, None, "SMC official profile not found in municipal administration database."
 
-            if not officials:
-                return False, None, None, "SMC official profile not found in municipal administration database."
+                    official = officials[0]
+                    if official.get("status") and str(official.get("status")).lower() not in ("active", "approved"):
+                        return False, None, None, f"Official account is currently {official.get('status')}. Contact municipal administration."
 
-            official = officials[0]
-            if official.get("status") and str(official.get("status")).lower() not in ("active", "approved"):
-                return False, None, None, f"Official account is currently {official.get('status')}. Contact municipal administration."
+                    official_id = official.get("official_id")
+                    official_name = official.get("name") or "SMC Official"
+                    official_designation = official.get("designation") or "Municipal Officer"
+                    official_phone = official.get("phone") or user.get("phone")
+                    raw_role = official.get("role") or user.get("role") or "officer"
 
-            official_id = official.get("official_id")
-            official_name = official.get("name") or "SMC Official"
-            official_designation = official.get("designation") or "Municipal Officer"
-            official_phone = official.get("phone") or user.get("phone")
-            raw_role = official.get("role") or user.get("role") or "officer"
+                    if "commissioner" in raw_role.lower() or "admin" in raw_role.lower():
+                        access_role = "SMC Admin"
+                    elif "health" in raw_role.lower():
+                        access_role = "SMC Health Officer"
+                    else:
+                        access_role = "Ward Officer"
 
-            if "commissioner" in raw_role.lower() or "admin" in raw_role.lower():
-                access_role = "SMC Admin"
-            elif "health" in raw_role.lower():
-                access_role = "SMC Health Officer"
-            else:
-                access_role = "Ward Officer"
-
-            user_profile = UserProfileSchema(
-                user_id=user["id"],
-                access_role=access_role,
-                name=official_name,
-                email=user.get("email"),
-                role=access_role,
-                roles=[access_role, "smc_official", raw_role],
-                official_id=official_id,
-                designation=official_designation,
-                phone=official_phone,
-            )
-            token = create_access_token(
-                subject={
-                    "user_id": user["id"],
-                    "role": access_role,
-                    "official_id": official_id,
-                    "name": official_name,
-                    "designation": official_designation,
-                    "phone": official_phone,
-                    "email": user.get("email"),
-                    "status": official.get("status", "active"),
-                }
-            )
-            return True, token, user_profile, None
+                    user_profile = UserProfileSchema(
+                        user_id=user["id"],
+                        access_role=access_role,
+                        name=official_name,
+                        email=user.get("email"),
+                        role=access_role,
+                        roles=[access_role, "smc_official", raw_role],
+                        official_id=official_id,
+                        designation=official_designation,
+                        phone=official_phone,
+                    )
+                    token = create_access_token(
+                        subject={
+                            "user_id": user["id"],
+                            "role": access_role,
+                            "official_id": official_id,
+                            "name": official_name,
+                            "designation": official_designation,
+                            "phone": official_phone,
+                            "email": user.get("email"),
+                            "status": official.get("status", "active"),
+                        }
+                    )
+                    return True, token, user_profile, None
 
         # Strategy 2: Direct Authentication for Hospital Staff, Providers, Citizens
         users = await supabase_http_client.select("auth_users", {"email": f"eq.{identifier}"})

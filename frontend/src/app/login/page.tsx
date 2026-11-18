@@ -52,6 +52,7 @@ function LoginPageContent() {
         body: JSON.stringify({
           identifier: trimmedIdentifier,
           password: trimmedPassword,
+          portal: "hospital",
         }),
       });
 
