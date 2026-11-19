@@ -838,17 +838,50 @@ export const diseaseCaseService = {
 
 export const diseaseService = {
   async getAll(): Promise<{ data: Disease[] | null; error: string | null }> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('diseases')
+          .select('*')
+          .order('disease_name', { ascending: true });
+        if (!error && data) {
+          return { data: data as Disease[], error: null };
+        }
+      } catch (err: any) {
+        console.warn('Supabase diseases fetch error, falling back to API:', err);
+      }
+    }
     return apiClient.get<Disease[]>('/disease-surveillance/diseases');
   },
 
   async search(query: string): Promise<{ data: Disease[] | null; error: string | null }> {
+    if (!query || !query.trim()) {
+      return this.getAll();
+    }
+    const q = query.trim();
+    if (supabase) {
+      try {
+        const safeQ = q.replace(/[,()]/g, '');
+        if (safeQ) {
+          const { data, error } = await supabase
+            .from('diseases')
+            .select('*')
+            .or(`disease_name.ilike.%${safeQ}%,disease_type.ilike.%${safeQ}%`)
+            .order('disease_name', { ascending: true });
+          if (!error && data && data.length > 0) {
+            return { data: data as Disease[], error: null };
+          }
+        }
+      } catch (err: any) {
+        console.warn('Supabase disease search error, falling back to local filter:', err);
+      }
+    }
     const res = await this.getAll();
-    if (!query || !query.trim()) return res;
-    const q = query.toLowerCase().trim();
+    const qLower = q.toLowerCase();
     const filtered = (res.data || []).filter(d => 
-      (d.disease_name || '').toLowerCase().includes(q) ||
-      (d.disease_category || '').toLowerCase().includes(q) ||
-      (d.disease_type || '').toLowerCase().includes(q)
+      (d.disease_name || '').toLowerCase().includes(qLower) ||
+      (d.disease_category || '').toLowerCase().includes(qLower) ||
+      (d.disease_type || '').toLowerCase().includes(qLower)
     );
     return { data: filtered, error: res.error };
   },
@@ -867,7 +900,11 @@ export const diseaseService = {
         const id = disease.disease_id || `DIS-${Date.now().toString(36).toUpperCase()}`;
         const newRecord = { ...disease, disease_id: id };
         const { data, error } = await supabase.from('diseases').insert(newRecord).select().single();
-        if (!error && data) {
+        if (error) {
+          console.error('Supabase disease insert error:', error);
+          return { data: null, error: error.message };
+        }
+        if (data) {
           return { data: data as Disease, error: null };
         }
       } catch (err: any) {

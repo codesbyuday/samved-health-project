@@ -717,8 +717,8 @@ export default function PatientRecords({ initialCitizen }: PatientRecordsProps =
     
     setIsCreatingDisease(true);
     const { data, error } = await diseaseSearchService.createDisease({
-      disease_name: newDiseaseName,
-      disease_type: newDiseaseType || null,
+      disease_name: newDiseaseName.trim(),
+      disease_type: newDiseaseType.trim() || null,
       disease_category: newDiseaseCategory,
       is_notifiable: newDiseaseNotifiable,
     });
@@ -726,14 +726,35 @@ export default function PatientRecords({ initialCitizen }: PatientRecordsProps =
     if (error) {
       toast.error(error);
     } else if (data) {
-      toast.success('Disease created successfully');
-      setSelectedDisease(data);
-      setDiseaseSearch(data.disease_name || '');
+      toast.success(`"${data.disease_name}" created and added to reported diseases`);
+
+      const diseaseToAdd: ReportedDiseaseForm = {
+        disease_id: data.disease_id,
+        disease_name: data.disease_name || newDiseaseName.trim(),
+        severity: newDiseaseSeverity || 'moderate',
+        status: newDiseaseStatus || 'active',
+      };
+
+      setReportedDiseases(prev => {
+        const alreadyExists = prev.some(
+          d => d.disease_id === diseaseToAdd.disease_id || 
+               d.disease_name.toLowerCase() === diseaseToAdd.disease_name.toLowerCase()
+        );
+        if (alreadyExists) return prev;
+        return [...prev, diseaseToAdd];
+      });
+
+      setSelectedDisease(null);
+      setDiseaseSearch('');
+      setDiseaseResults([]);
       setShowNewDiseaseDialog(false);
+      setShowAddDiseaseDialog(false);
       setNewDiseaseName('');
       setNewDiseaseType('');
       setNewDiseaseCategory('non_communicable');
       setNewDiseaseNotifiable(false);
+      setNewDiseaseSeverity('moderate');
+      setNewDiseaseStatus('active');
     }
     setIsCreatingDisease(false);
   };
@@ -2283,24 +2304,43 @@ export default function PatientRecords({ initialCitizen }: PatientRecordsProps =
               {/* Fixed height container to prevent layout shifts */}
               <div className="min-h-[120px]">
                 {diseaseResults.length > 0 && !selectedDisease && (
-                  <div className="border rounded-lg divide-y max-h-40 overflow-auto bg-white shadow-sm">
-                    {diseaseResults.slice(0, 10).map((disease) => (
-                      <button
-                        key={disease.disease_id}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-emerald-50 text-left transition-colors"
-                        onClick={() => {
-                          setSelectedDisease(disease);
-                          setDiseaseSearch('');
-                          setDiseaseResults([]);
-                        }}
-                      >
-                        <Bug className="h-4 w-4 text-red-400" />
-                        <div>
-                          <p className="font-medium text-sm text-slate-800">{disease.disease_name}</p>
-                          <p className="text-xs text-slate-500">{disease.disease_category} - {disease.disease_type || 'N/A'}</p>
-                        </div>
-                      </button>
-                    ))}
+                  <div className="space-y-2">
+                    <div className="border rounded-lg divide-y max-h-40 overflow-auto bg-white shadow-sm">
+                      {diseaseResults.slice(0, 10).map((disease) => (
+                        <button
+                          key={disease.disease_id}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-emerald-50 text-left transition-colors"
+                          onClick={() => {
+                            setSelectedDisease(disease);
+                            setDiseaseSearch('');
+                            setDiseaseResults([]);
+                          }}
+                        >
+                          <Bug className="h-4 w-4 text-red-400" />
+                          <div>
+                            <p className="font-medium text-sm text-slate-800">{disease.disease_name}</p>
+                            <p className="text-xs text-slate-500">{disease.disease_category} - {disease.disease_type || 'N/A'}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {diseaseSearch && (
+                      <div className="text-right">
+                        <Button
+                          size="sm"
+                          variant="link"
+                          className="h-auto p-0 text-xs text-emerald-600 hover:text-emerald-700"
+                          onClick={() => {
+                            setNewDiseaseName(diseaseSearch);
+                            setShowAddDiseaseDialog(false);
+                            setShowNewDiseaseDialog(true);
+                          }}
+                        >
+                          <Plus className="h-3 w-3 mr-1 inline" />
+                          Don&apos;t see it? Add &quot;{diseaseSearch}&quot; as new disease
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
                 {selectedDisease && (
@@ -2441,6 +2481,40 @@ export default function PatientRecords({ initialCitizen }: PatientRecordsProps =
                 </SelectContent>
               </Select>
             </div>
+            {/* Severity */}
+            <div className="space-y-2">
+              <Label>Severity</Label>
+              <Select value={newDiseaseSeverity} onValueChange={setNewDiseaseSeverity}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SEVERITY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Status */}
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={newDiseaseStatus} onValueChange={setNewDiseaseStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DISEASE_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -2460,7 +2534,7 @@ export default function PatientRecords({ initialCitizen }: PatientRecordsProps =
             </Button>
             <Button onClick={handleCreateNewDisease} disabled={isCreatingDisease || !newDiseaseName.trim()}>
               {isCreatingDisease && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Disease
+              Create & Add Disease
             </Button>
           </DialogFooter>
         </DialogContent>

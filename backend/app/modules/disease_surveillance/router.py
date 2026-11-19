@@ -32,3 +32,8 @@ async def report_disease_case(payload: DiseaseCaseCreateSchema):
 @router.get("/diseases", response_model=List[DiseaseSchema])
 async def get_diseases():
     return await disease_surveillance_service.get_diseases()
+
+
+@router.post("/diseases", response_model=DiseaseSchema, status_code=status.HTTP_201_CREATED)
+async def create_disease(payload: DiseaseSchema):
+    return await disease_surveillance_service.create_disease(payload)

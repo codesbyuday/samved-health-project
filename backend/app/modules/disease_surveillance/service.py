@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import List, Optional
 from app.database.connection import supabase_http_client
-from app.modules.disease_surveillance.schemas import DiseaseCaseCreateSchema
+from app.modules.disease_surveillance.schemas import DiseaseCaseCreateSchema, DiseaseSchema
 
 DISEASE_NAME_MAP = {
   "DIS00001": "Dengue Fever",
@@ -137,8 +137,17 @@ class DiseaseSurveillanceService:
                 {"disease_id": "DIS00002", "disease_name": "Malaria", "disease_type": "Parasitic", "is_notifiable": True},
                 {"disease_id": "DIS00003", "disease_name": "Typhoid", "disease_type": "Bacterial", "is_notifiable": True},
             ]
-        await cache_manager.set("diseases_catalog", diseases, ttl_seconds=300)
+        await cache_manager.set("diseases_catalog", diseases, ttl_seconds=60)
         return diseases
+
+    async def create_disease(self, payload: DiseaseSchema) -> dict:
+        from app.core.cache import cache_manager
+        data = payload.model_dump(exclude_unset=True, mode="json")
+        if not data.get("disease_id"):
+            data["disease_id"] = f"DIS-{uuid.uuid4().hex[:8].upper()}"
+        res = await supabase_http_client.insert("diseases", data)
+        await cache_manager.delete("diseases_catalog")
+        return res[0] if res else data
 
     async def get_public_analytics(self) -> dict:
         from app.core.cache import cache_manager
