@@ -33,6 +33,17 @@ function getEnv(key, fallback = '') {
   return fallback;
 }
 
+export function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const supabaseConfig = {
   url:
     getEnv('NEXT_PUBLIC_SUPABASE_URL') ||
@@ -773,46 +784,114 @@ function getPersistedSales(providerId, orders = []) {
 }
 
 // -------------------------------------------------------------
+// Medicines Catalog Registration
+// -------------------------------------------------------------
+export async function registerMedicine(payload) {
+  let medId = payload.medicine_id;
+  if (!medId || medId.startsWith('MED-CUST-')) {
+    try {
+      const existing = await restSelect('medicines', { select: 'medicine_id' });
+      let maxNum = 0;
+      if (Array.isArray(existing)) {
+        existing.forEach((m) => {
+          const match = (m.medicine_id || '').match(/^MED-(\d+)$/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+          }
+        });
+      }
+      medId = `MED-${String(maxNum + 1).padStart(3, '0')}`;
+    } catch (e) {
+      medId = `MED-${Math.floor(100 + Math.random() * 900)}`;
+    }
+  }
+
+  const cleanName = (payload.medicine_name || payload.name || payload.custom_name || '').trim();
+  const cleanCategory = (payload.medicine_category || payload.category || payload.custom_category || 'Tablet').trim();
+  const cleanManufacturer = (payload.manufacturer_name || payload.manufacturer || payload.custom_manufacturer || 'Generic Pharma').trim();
+  const cleanDescription = (payload.description || '').trim();
+
+  const medicineRecord = {
+    medicine_id: medId,
+    medicine_name: cleanName,
+    medicine_category: cleanCategory,
+    manufacturer_name: cleanManufacturer,
+    description: cleanDescription || `Registered by ${payload.provider_id || 'pharmacy'}`,
+  };
+
+  const rows = await restInsert('medicines', medicineRecord);
+  const created = (rows && rows[0]) || medicineRecord;
+  return {
+    ...created,
+    name: created.medicine_name,
+    category: created.medicine_category,
+    manufacturer: created.manufacturer_name,
+  };
+}
+
+// -------------------------------------------------------------
 // Stock Item Mutations (CRUD)
 // -------------------------------------------------------------
 export async function addInventoryItem(payload, session) {
   const providerId = payload.provider_id || session?.profile?.provider_id || 'PROV-PHM-001';
-  const stockId = `stock-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const stockId = generateUUID();
   const now = new Date().toISOString();
 
-  // Cache extra ERP fields locally so they persist even if DB columns aren't added yet
+  let targetMedId = payload.medicine_id;
+
+  // If this is marked as custom medicine or no valid medicine_id provided, register it in the master medicines table first
+  if (payload.is_custom || !targetMedId || targetMedId.startsWith('MED-CUST-') || payload.isCreatingNewMedicine) {
+    const registered = await registerMedicine({
+      medicine_name: payload.custom_name || payload.medicine_name || payload.name,
+      medicine_category: payload.custom_category || payload.medicine_category || payload.category,
+      manufacturer_name: payload.custom_manufacturer || payload.manufacturer_name || payload.manufacturer,
+      description: payload.description || '',
+      provider_id: providerId,
+    });
+    targetMedId = registered.medicine_id;
+  }
+
+  const batchNo = payload.batch_number ? payload.batch_number.trim().toUpperCase() : `BATCH-${Date.now().toString().slice(-6).toUpperCase()}`;
+  const priceVal = payload.price !== undefined && payload.price !== '' ? Number(payload.price) : 45.0;
+
   saveExtraStockFields(stockId, {
-    price: payload.price !== undefined ? Number(payload.price) : 45.0,
-    batch_number: payload.batch_number || `BATCH-${stockId.slice(6, 12).toUpperCase()}`,
+    price: priceVal,
+    batch_number: batchNo,
   });
 
-  const baseItem = {
+  const fullPayload = {
     stock_id: stockId,
     provider_id: providerId,
-    medicine_id: payload.medicine_id,
+    medicine_id: targetMedId,
     quantity: Number(payload.quantity || 0),
     threshold: Number(payload.threshold || 10),
-    expiry_date: payload.expiry_date,
+    price: priceVal,
+    batch_number: batchNo,
+    expiry_date: payload.expiry_date || '2026-12-31',
     last_updated: now,
   };
 
-  // Try inserting with price and batch_number into Supabase
   try {
-    const fullPayload = {
-      ...baseItem,
-      price: Number(payload.price || 0),
-      batch_number: payload.batch_number,
-    };
     const rows = await restInsert('pharmacy_medicine_stock', fullPayload);
     return rows[0] || fullPayload;
   } catch (err) {
-    console.warn('Insert with ERP fields failed, falling back to base stock columns:', err.message);
+    console.warn('Insert with price/batch_number failed, trying base stock columns:', err.message);
+    const baseItem = {
+      stock_id: stockId,
+      provider_id: providerId,
+      medicine_id: targetMedId,
+      quantity: Number(payload.quantity || 0),
+      threshold: Number(payload.threshold || 10),
+      expiry_date: payload.expiry_date || '2026-12-31',
+      last_updated: now,
+    };
     try {
       const rows = await restInsert('pharmacy_medicine_stock', baseItem);
-      return rows[0] || baseItem;
+      return { ...baseItem, price: priceVal, batch_number: batchNo, ...(rows[0] || {}) };
     } catch (fallbackErr) {
-      console.warn('Direct insert failed, caching item locally:', fallbackErr.message);
-      return baseItem;
+      console.error('All insert attempts failed for pharmacy stock:', fallbackErr);
+      throw fallbackErr;
     }
   }
 }

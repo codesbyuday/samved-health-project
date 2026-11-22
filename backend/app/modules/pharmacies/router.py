@@ -78,6 +78,11 @@ async def get_medicines():
     return await pharmacy_service.get_medicines()
 
 
+@router.post("/medicines", response_model=MedicineSchema, status_code=status.HTTP_201_CREATED)
+async def create_medicine(payload: MedicineSchema):
+    return await pharmacy_service.create_medicine(payload)
+
+
 @router.get("/stock", response_model=List[MedicineStockSchema])
 async def get_medicine_stock(
     hospital_id: Optional[str] = Query(None),

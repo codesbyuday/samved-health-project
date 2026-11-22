@@ -1,13 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSearch } from '../context/searchcontext';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 
+const standardMedCategories = [
+  'Tablet',
+  'Capsule',
+  'Syrup',
+  'Suspension',
+  'Injection',
+  'Ointment / Cream',
+  'Drops (Eye/Ear)',
+  'Inhaler / Respules',
+  'IV Fluid / Infusion',
+  'Powder / Sachet',
+  'Vaccine',
+  'Antibiotic',
+  'Analgesic / Antipyretic',
+  'Antidiabetic',
+  'Antihistamine',
+  'Other / Custom',
+];
+
+const commonManufacturers = [
+  'Cipla Ltd',
+  'Sun Pharma',
+  'Dr. Reddy\'s Lab',
+  'Abbott India',
+  'Lupin Ltd',
+  'Mankind Pharma',
+  'Torrent Pharma',
+  'Alkem Laboratories',
+  'Glenmark Pharmaceuticals',
+  'Zydus Lifesciences',
+  'Generic / Govt. Supply',
+];
+
 const emptyForm = {
   medicine_id: '',
+  name: '',
   custom_name: '',
-  custom_category: 'Tablet',
+  category: 'Tablet',
+  custom_category: '',
+  manufacturer: '',
   custom_manufacturer: '',
+  description: '',
   quantity: '100',
   threshold: '20',
   price: '45.00',
@@ -22,6 +59,11 @@ const Inventory = () => {
 
   const [showModal, setShowModal] = useState(false);
   const [isCustomMed, setIsCustomMed] = useState(false);
+  const [selectedCatalogMed, setSelectedCatalogMed] = useState(null);
+  const [addSearchQuery, setAddSearchQuery] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+
   const [editItem, setEditItem] = useState(null);
   const [newMed, setNewMed] = useState(emptyForm);
   const [filterCategory, setFilterCategory] = useState('ALL');
@@ -55,28 +97,181 @@ const Inventory = () => {
     return matchesSearch && matchesCat;
   });
 
+  const existingStockMedMap = useMemo(() => {
+    const map = new Map();
+    stock.forEach((item) => {
+      map.set(item.medicine_id, item);
+    });
+    return map;
+  }, [stock]);
+
+  // Dynamic filtering of existing central catalog medicines
+  const matchingCatalogMeds = useMemo(() => {
+    const q = addSearchQuery.trim().toLowerCase();
+    if (!q) {
+      return medicines.slice(0, 12);
+    }
+    return medicines.filter((m) => {
+      const name = (m.name || m.medicine_name || '').toLowerCase();
+      const cat = (m.category || m.medicine_category || '').toLowerCase();
+      const mfr = (m.manufacturer || m.manufacturer_name || '').toLowerCase();
+      const mid = (m.medicine_id || '').toLowerCase();
+      return name.includes(q) || cat.includes(q) || mfr.includes(q) || mid.includes(q);
+    });
+  }, [addSearchQuery, medicines]);
+
+  // Select a medicine from central catalog
+  const handleSelectCatalogMed = (med) => {
+    setSelectedCatalogMed(med);
+    setIsCustomMed(false);
+    setActionError('');
+    setNewMed((prev) => ({
+      ...prev,
+      medicine_id: med.medicine_id,
+      name: med.name || med.medicine_name,
+      category: med.category || med.medicine_category || 'Tablet',
+      manufacturer: med.manufacturer || med.manufacturer_name || '',
+      description: med.description || '',
+    }));
+  };
+
+  // Start registering a custom / new product
+  const handleStartCreateNew = (customName = '') => {
+    const name = customName || addSearchQuery.trim();
+    setSelectedCatalogMed(null);
+    setIsCustomMed(true);
+    setActionError('');
+    setNewMed((prev) => ({
+      ...prev,
+      medicine_id: '',
+      name: name,
+      custom_name: name,
+      category: 'Tablet',
+      custom_category: '',
+      manufacturer: '',
+      custom_manufacturer: '',
+      description: '',
+    }));
+  };
+
+  // Reset Add Modal selection back to search
+  const handleResetSelection = () => {
+    setSelectedCatalogMed(null);
+    setIsCustomMed(false);
+    setAddSearchQuery('');
+    setActionError('');
+    setNewMed({
+      ...emptyForm,
+      batch_number: `BATCH-${Date.now().toString().slice(-5).toUpperCase()}`,
+      expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    });
+  };
+
+  // Open modal
+  const handleOpenAddModal = () => {
+    handleResetSelection();
+    setShowModal(true);
+  };
+
   const handleAddSubmit = async (event) => {
     event.preventDefault();
+    setActionError('');
 
-    let targetMedId = newMed.medicine_id;
-    if (isCustomMed || !targetMedId) {
-      targetMedId = `MED-CUST-${Date.now().toString().slice(-6)}`;
-    }
+    try {
+      if (selectedCatalogMed) {
+        if (!newMed.quantity || Number(newMed.quantity) <= 0) {
+          setActionError('Please enter a valid stock quantity.');
+          return;
+        }
+        if (newMed.price === undefined || newMed.price === '' || Number(newMed.price) < 0) {
+          setActionError('Please enter a valid unit price.');
+          return;
+        }
+        if (!newMed.batch_number?.trim()) {
+          setActionError('Batch number is required.');
+          return;
+        }
+        if (!newMed.expiry_date) {
+          setActionError('Expiry date is required.');
+          return;
+        }
 
-    const result = await createStockItem({
-      provider_id: pharmacyProfile?.provider_id || 'PROV-PHM-001',
-      medicine_id: targetMedId,
-      quantity: Number(newMed.quantity || 0),
-      threshold: Number(newMed.threshold || 10),
-      price: Number(newMed.price || 0),
-      batch_number: newMed.batch_number || `BATCH-${Date.now().toString().slice(-6)}`,
-      expiry_date: newMed.expiry_date || '2026-12-31',
-    });
+        const result = await createStockItem({
+          provider_id: pharmacyProfile?.provider_id || 'PROV-PHM-001',
+          medicine_id: selectedCatalogMed.medicine_id,
+          quantity: Number(newMed.quantity),
+          threshold: Number(newMed.threshold || 10),
+          price: Number(newMed.price),
+          batch_number: newMed.batch_number.trim().toUpperCase(),
+          expiry_date: newMed.expiry_date,
+        });
 
-    if (result.success) {
-      setShowModal(false);
-      setNewMed(emptyForm);
-      setIsCustomMed(false);
+        if (!result.success) {
+          setActionError(result.error || 'Failed to add stock item.');
+          return;
+        }
+
+        const medName = selectedCatalogMed.name || selectedCatalogMed.medicine_name;
+        setToastMessage(`✓ Added "${medName}" (${newMed.batch_number.trim().toUpperCase()}) to inventory!`);
+        setTimeout(() => setToastMessage(''), 7000);
+        setShowModal(false);
+        handleResetSelection();
+      } else if (isCustomMed) {
+        const cleanName = (newMed.name || newMed.custom_name || '').trim();
+        if (!cleanName) {
+          setActionError('Product / Medicine name is required.');
+          return;
+        }
+        if (!newMed.quantity || Number(newMed.quantity) <= 0) {
+          setActionError('Please enter a valid stock quantity.');
+          return;
+        }
+        if (newMed.price === undefined || newMed.price === '' || Number(newMed.price) < 0) {
+          setActionError('Please enter a valid unit price.');
+          return;
+        }
+        if (!newMed.batch_number?.trim()) {
+          setActionError('Batch number is required.');
+          return;
+        }
+        if (!newMed.expiry_date) {
+          setActionError('Expiry date is required.');
+          return;
+        }
+
+        const finalCat =
+          newMed.category === 'Other / Custom'
+            ? (newMed.custom_category || '').trim() || 'General'
+            : (newMed.category || 'Tablet').trim();
+
+        const result = await createStockItem({
+          provider_id: pharmacyProfile?.provider_id || 'PROV-PHM-001',
+          is_custom: true,
+          custom_name: cleanName,
+          custom_category: finalCat,
+          custom_manufacturer: (newMed.manufacturer || newMed.custom_manufacturer || 'Generic Pharma').trim(),
+          description: (newMed.description || '').trim(),
+          quantity: Number(newMed.quantity),
+          threshold: Number(newMed.threshold || 10),
+          price: Number(newMed.price),
+          batch_number: newMed.batch_number.trim().toUpperCase(),
+          expiry_date: newMed.expiry_date,
+        });
+
+        if (!result.success) {
+          setActionError(result.error || 'Failed to register product.');
+          return;
+        }
+
+        setToastMessage(`✨ Registered new product "${cleanName}" into central catalog and added to inventory!`);
+        setTimeout(() => setToastMessage(''), 7000);
+        setShowModal(false);
+        handleResetSelection();
+      } else {
+        setActionError('Please select a medicine from the central catalog or click "Register New Product".');
+      }
+    } catch (err) {
+      setActionError(err.message || 'An unexpected error occurred.');
     }
   };
 
@@ -91,6 +286,8 @@ const Inventory = () => {
     });
 
     if (result.success) {
+      setToastMessage(`✓ Updated stock for "${editItem.name || 'product'}" successfully.`);
+      setTimeout(() => setToastMessage(''), 6000);
       setEditItem(null);
     }
   };
@@ -118,14 +315,7 @@ const Inventory = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              setNewMed({
-                ...emptyForm,
-                batch_number: `BATCH-${Date.now().toString().slice(-5)}`,
-                expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-              });
-              setShowModal(true);
-            }}
+            onClick={handleOpenAddModal}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer"
           >
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -135,6 +325,24 @@ const Inventory = () => {
           </button>
         </div>
       </div>
+
+      {/* Feedback Toast Banner */}
+      {toastMessage && (
+        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700/80 p-3.5 px-4 text-xs font-semibold text-emerald-800 dark:text-emerald-200 flex items-center justify-between shadow-xs transition-all animate-fade-in">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            onClick={() => setToastMessage('')}
+            className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white font-bold ml-4 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Control Toolbar with Integrated Search & Filter Controls */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 md:p-5 shadow-sm space-y-4">
@@ -443,180 +651,648 @@ const Inventory = () => {
       {/* Add New Stock Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm overflow-y-auto">
-          <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 md:p-8 shadow-2xl text-slate-900 dark:text-white my-8">
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 md:p-7 shadow-2xl text-slate-900 dark:text-white my-8 max-h-[92vh] overflow-y-auto">
+            {/* Close Button */}
             <button
-              onClick={() => setShowModal(false)}
-              className="absolute right-4 top-4 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition font-bold"
+              onClick={() => {
+                setShowModal(false);
+                handleResetSelection();
+              }}
+              className="absolute right-4 top-4 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition font-bold cursor-pointer"
               aria-label="Close"
             >
               ✕
             </button>
-            <h3 className="mb-1 text-xl font-bold text-slate-900 dark:text-white">Add Product to Pharmacy Inventory</h3>
-            <p className="mb-5 text-xs text-slate-500 dark:text-slate-400">
-              Enter product pricing, batch details, and initial stock quantities for this facility.
-            </p>
 
-            <form onSubmit={handleAddSubmit} className="space-y-4">
-              <div className="flex items-center gap-6 text-xs font-semibold text-slate-700 dark:text-slate-300 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="medType"
-                    checked={!isCustomMed}
-                    onChange={() => setIsCustomMed(false)}
-                    className="accent-teal-600 w-4 h-4"
-                  />
-                  <span>Select from Central Catalog</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="medType"
-                    checked={isCustomMed}
-                    onChange={() => setIsCustomMed(true)}
-                    className="accent-teal-600 w-4 h-4"
-                  />
-                  <span>Add Custom Medicine</span>
-                </label>
+            {/* Modal Header */}
+            <div className="mb-5 pr-8">
+              <h3 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                </span>
+                <span>Add Product to Pharmacy Inventory</span>
+              </h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Search SMC Central Medicine Catalog or dynamically register a new medicine product into catalog and stock.
+              </p>
+            </div>
+
+            {/* Error Banner */}
+            {actionError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/80 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+                <svg className="w-4 h-4 shrink-0 text-rose-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <span>{actionError}</span>
               </div>
+            )}
 
-              {!isCustomMed ? (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Select Medicine <span className="text-red-500">*</span>
+            {/* Top Switcher Tabs */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800/70 rounded-xl mb-5 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomMed(false);
+                  setActionError('');
+                }}
+                className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  !isCustomMed
+                    ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <span>Search Central Catalog</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStartCreateNew(addSearchQuery)}
+                className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  isCustomMed
+                    ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>+ Register New Medicine</span>
+              </button>
+            </div>
+
+            {/* STAGE 1: DYNAMIC SEARCH FROM CATALOG (when !selectedCatalogMed && !isCustomMed) */}
+            {!selectedCatalogMed && !isCustomMed && (
+              <div className="space-y-4">
+                {/* Search Input Bar */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                    <span>Search SMC Medicine Catalog:</span>
+                    <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                      Type to filter or register new if not found
+                    </span>
                   </label>
-                  <select
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs"
-                    value={newMed.medicine_id}
-                    onChange={(event) => setNewMed({ ...newMed, medicine_id: event.target.value })}
-                  >
-                    <option value="">-- Choose Medicine from Catalog --</option>
-                    {medicines.map((medicine) => (
-                      <option key={medicine.medicine_id} value={medicine.medicine_id}>
-                        {medicine.name || medicine.medicine_name} ({medicine.category || medicine.medicine_category || 'General'})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <svg
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={addSearchQuery}
+                      onChange={(e) => setAddSearchQuery(e.target.value)}
+                      placeholder="Search by medicine name, category, manufacturer, or MED-ID..."
+                      className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs md:text-sm font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all shadow-xs"
+                      autoFocus
+                    />
+                    {addSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setAddSearchQuery('')}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold cursor-pointer"
+                        title="Clear search"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Medicine Name <span className="text-red-500">*</span>
+
+                {/* Integrated In-Flow Medicine Browser Panel (Like Lab's Test Browser) */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs flex flex-col">
+                  {/* Panel Header */}
+                  <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      {addSearchQuery.trim() ? `Search Results for "${addSearchQuery}"` : 'SMC Central Medicine Catalog'}
+                    </span>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60">
+                      {matchingCatalogMeds.length} medicines
+                    </span>
+                  </div>
+
+                  {/* Scrollable list items */}
+                  <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {matchingCatalogMeds.length > 0 ? (
+                      matchingCatalogMeds.map((med) => {
+                        const medName = med.name || med.medicine_name;
+                        const medCat = med.category || med.medicine_category || 'Tablet';
+                        const manufacturer = med.manufacturer || med.manufacturer_name || 'Standard';
+                        const existingStock = existingStockMedMap.get(med.medicine_id);
+
+                        return (
+                          <div
+                            key={med.medicine_id}
+                            onClick={() => handleSelectCatalogMed(med)}
+                            className="p-3 transition-colors flex items-center justify-between gap-3 hover:bg-teal-50/70 dark:hover:bg-teal-950/40 cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-8 w-8 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 flex items-center justify-center shrink-0 font-bold text-xs">
+                                💊
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-bold text-slate-900 dark:text-white text-xs md:text-sm truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                                    {medName}
+                                  </p>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                    {medCat}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                                    {med.medicine_id}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                  <span>{manufacturer}</span>
+                                  {med.description && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="truncate max-w-xs">{med.description}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {existingStock && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  In Stock: {existingStock.quantity}
+                                </span>
+                              )}
+                              <span className="px-3 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60 group-hover:bg-teal-600 group-hover:text-white transition-all flex items-center gap-1 shadow-2xs">
+                                <span>Select</span>
+                                <span>→</span>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                        <svg className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <p className="font-bold text-slate-800 dark:text-slate-200">
+                          No existing medicines found matching "{addSearchQuery}"
+                        </p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                          You can register this as a new medicine in the SMC catalog below.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* DYNAMIC SCENARIO ACTION: REGISTER AS NEW PRODUCT IN MASTER LIST (Matches Lab Pattern!) */}
+                    {addSearchQuery.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartCreateNew(addSearchQuery.trim())}
+                        className="w-full text-left p-3.5 bg-gradient-to-r from-teal-50/90 to-emerald-50/90 hover:from-teal-100 hover:to-emerald-100 dark:from-teal-950/50 dark:to-emerald-950/50 dark:hover:from-teal-900/70 dark:hover:to-emerald-900/70 flex items-center justify-between gap-3 text-xs font-bold text-teal-900 dark:text-teal-200 transition-all cursor-pointer border-t border-teal-200 dark:border-teal-800"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-teal-600 to-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs font-bold text-sm">
+                            +
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-[10px] uppercase font-bold text-teal-700 dark:text-teal-400 block tracking-wider">
+                              Can't find it in catalog?
+                            </span>
+                            <span className="truncate block font-extrabold text-slate-900 dark:text-white text-xs">
+                              Register new medicine in catalog:{' '}
+                              <strong className="text-teal-700 dark:text-teal-400 underline decoration-teal-400">
+                                "{addSearchQuery.trim()}"
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-teal-600 text-white shadow-xs">
+                          Register New
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between text-xs">
+                  <span className="text-slate-400 dark:text-slate-500 text-[11px]">
+                    Click any medicine above to record initial batch and pricing.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowModal(false);
+                      handleResetSelection();
+                    }}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE 2: SELECTED EXISTING CATALOG MEDICINE */}
+            {selectedCatalogMed && !isCustomMed && (
+              <form onSubmit={handleAddSubmit} className="space-y-4">
+                {/* Selected Med Summary Card */}
+                <div className="p-4 rounded-xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/80 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="h-10 w-10 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-300 dark:border-teal-700 flex items-center justify-center shrink-0 text-lg">
+                      💊
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 dark:bg-teal-900/80 dark:text-teal-200">
+                          SMC Catalog
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          {selectedCatalogMed.category || selectedCatalogMed.medicine_category || 'Tablet'}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                          {selectedCatalogMed.medicine_id}
+                        </span>
+                      </div>
+                      <h4 className="font-extrabold text-base text-slate-900 dark:text-white mt-1">
+                        {selectedCatalogMed.name || selectedCatalogMed.medicine_name}
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 font-medium">
+                        Manufacturer: {selectedCatalogMed.manufacturer || selectedCatalogMed.manufacturer_name || 'Standard'}
+                      </p>
+                      {selectedCatalogMed.description && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 italic">
+                          {selectedCatalogMed.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleResetSelection}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer transition-all shadow-xs flex items-center gap-1"
+                    title="Choose a different medicine"
+                  >
+                    <span>←</span>
+                    <span>Change</span>
+                  </button>
+                </div>
+
+                {/* Stock Details Form Inputs */}
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Unit Price (₹) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative flex items-center rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-500 transition shadow-xs overflow-hidden">
+                      <span className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs border-r border-slate-300 dark:border-slate-600">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        required
+                        placeholder="45.00"
+                        className="w-full px-3 py-2 bg-transparent text-slate-900 dark:text-white text-sm font-bold outline-none"
+                        value={newMed.price}
+                        onChange={(e) => setNewMed({ ...newMed, price: e.target.value })}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Batch Number <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. BATCH-2026-X"
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white uppercase font-mono font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                      value={newMed.batch_number}
+                      onChange={(e) => setNewMed({ ...newMed, batch_number: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Stock Quantity <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      placeholder="100"
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                      value={newMed.quantity}
+                      onChange={(e) => setNewMed({ ...newMed, quantity: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Low Stock Threshold <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="20"
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                      value={newMed.threshold}
+                      onChange={(e) => setNewMed({ ...newMed, threshold: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Expiry Date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    className="w-full px-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                    value={newMed.expiry_date}
+                    onChange={(e) => setNewMed({ ...newMed, expiry_date: e.target.value })}
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowModal(false);
+                      handleResetSelection();
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={mutating}
+                    className="px-6 py-2.5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                  >
+                    {mutating ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Adding to Stock...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>✓</span>
+                        <span>Confirm & Add to Inventory</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* STAGE 3: REGISTER NEW MEDICINE (when isCustomMed) */}
+            {isCustomMed && (
+              <form onSubmit={handleAddSubmit} className="space-y-4">
+                {/* Header Notice Banner */}
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 flex items-center justify-between gap-3 text-amber-900 dark:text-amber-200">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <span className="text-base">✨</span>
+                    <span>Registering new product into SMC Central Catalog and your inventory.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetSelection}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shrink-0 cursor-pointer shadow-xs"
+                  >
+                    ← Back to Search
+                  </button>
+                </div>
+
+                {/* Section: Product Definition */}
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Product Master Information
+                  </h4>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Medicine / Product Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
                       required
                       placeholder="e.g. Azithromycin 500mg"
-                      className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs"
-                      value={newMed.custom_name}
-                      onChange={(e) => setNewMed({ ...newMed, custom_name: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                      value={newMed.name || newMed.custom_name}
+                      onChange={(e) => setNewMed({ ...newMed, name: e.target.value, custom_name: e.target.value })}
+                      autoFocus
                     />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Dosage / Category <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        required
+                        className="w-full px-3 py-2 rounded-xl text-xs md:text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs cursor-pointer"
+                        value={newMed.category}
+                        onChange={(e) => setNewMed({ ...newMed, category: e.target.value })}
+                      >
+                        {standardMedCategories.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Manufacturer <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        list="manufacturers-list"
+                        placeholder="e.g. Cipla Ltd"
+                        className="w-full px-3 py-2 rounded-xl text-xs md:text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                        value={newMed.manufacturer || newMed.custom_manufacturer}
+                        onChange={(e) =>
+                          setNewMed({ ...newMed, manufacturer: e.target.value, custom_manufacturer: e.target.value })
+                        }
+                      />
+                      <datalist id="manufacturers-list">
+                        {commonManufacturers.map((m) => (
+                          <option key={m} value={m} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
+
+                  {newMed.category === 'Other / Custom' && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Specify Custom Category <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Herbal Supplement, First-aid"
+                        className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                        value={newMed.custom_category}
+                        onChange={(e) => setNewMed({ ...newMed, custom_category: e.target.value })}
+                      />
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Category</label>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Description / Composition (Optional)
+                    </label>
                     <input
                       type="text"
-                      placeholder="e.g. Antibiotic"
-                      className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs"
-                      value={newMed.custom_category}
-                      onChange={(e) => setNewMed({ ...newMed, custom_category: e.target.value })}
+                      placeholder="e.g. Broad-spectrum macrolide antibiotic."
+                      className="w-full px-3 py-2 rounded-xl text-xs md:text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                      value={newMed.description}
+                      onChange={(e) => setNewMed({ ...newMed, description: e.target.value })}
                     />
                   </div>
+                </div>
+
+                {/* Section: Stock Details */}
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Inventory Stock & Pricing
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Unit Price (₹) <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative flex items-center rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-500 transition shadow-xs overflow-hidden">
+                        <span className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs border-r border-slate-300 dark:border-slate-600">
+                          ₹
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          required
+                          placeholder="45.00"
+                          className="w-full px-3 py-2 bg-transparent text-slate-900 dark:text-white text-sm font-bold outline-none"
+                          value={newMed.price}
+                          onChange={(e) => setNewMed({ ...newMed, price: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Batch Number <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="BATCH-2026-X"
+                        className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white uppercase font-mono font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                        value={newMed.batch_number}
+                        onChange={(e) => setNewMed({ ...newMed, batch_number: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Stock Quantity <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        placeholder="100"
+                        className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                        value={newMed.quantity}
+                        onChange={(e) => setNewMed({ ...newMed, quantity: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Low Stock Alert Threshold <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        placeholder="20"
+                        className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                        value={newMed.threshold}
+                        onChange={(e) => setNewMed({ ...newMed, threshold: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Manufacturer</label>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Expiry Date <span className="text-rose-500">*</span>
+                    </label>
                     <input
-                      type="text"
-                      placeholder="e.g. Cipla Ltd"
-                      className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs"
-                      value={newMed.custom_manufacturer}
-                      onChange={(e) => setNewMed({ ...newMed, custom_manufacturer: e.target.value })}
+                      type="date"
+                      required
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition shadow-xs"
+                      value={newMed.expiry_date}
+                      onChange={(e) => setNewMed({ ...newMed, expiry_date: e.target.value })}
                     />
                   </div>
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Unit Price (₹) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    placeholder="45.00"
-                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs font-semibold"
-                    value={newMed.price}
-                    onChange={(event) => setNewMed({ ...newMed, price: event.target.value })}
-                  />
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowModal(false);
+                      handleResetSelection();
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={mutating}
+                    className="px-6 py-2.5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                  >
+                    {mutating ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Registering Product...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>✨</span>
+                        <span>Register & Add to Inventory</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Batch Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="BATCH-2026-X"
-                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs uppercase font-mono"
-                    value={newMed.batch_number}
-                    onChange={(event) => setNewMed({ ...newMed, batch_number: event.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Stock Quantity <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="100"
-                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs font-semibold"
-                    value={newMed.quantity}
-                    onChange={(event) => setNewMed({ ...newMed, quantity: event.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Low Stock Alert Threshold <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="20"
-                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs"
-                    value={newMed.threshold}
-                    onChange={(event) => setNewMed({ ...newMed, threshold: event.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Expiry Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition shadow-xs"
-                  value={newMed.expiry_date}
-                  onChange={(event) => setNewMed({ ...newMed, expiry_date: event.target.value })}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full mt-5 py-3 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                disabled={mutating}
-              >
-                {mutating ? 'Saving Product...' : 'Confirm & Add to Inventory'}
-              </button>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -4,7 +4,7 @@ from datetime import date
 
 
 class MedicineSchema(BaseModel):
-    medicine_id: str
+    medicine_id: Optional[str] = None
     medicine_name: Optional[str] = None
     medicine_category: Optional[str] = None
     manufacturer_name: Optional[str] = None

@@ -6,7 +6,7 @@ import uuid
 from typing import List, Optional, Tuple
 from datetime import datetime
 from app.database.connection import supabase_http_client
-from app.modules.pharmacies.schemas import MedicineStockCreateSchema, MedicineStockUpdateSchema
+from app.modules.pharmacies.schemas import MedicineSchema, MedicineStockCreateSchema, MedicineStockUpdateSchema
 
 
 def parse_wkb_point(wkb_hex: Optional[str]) -> Tuple[Optional[float], Optional[float]]:
@@ -51,8 +51,29 @@ class PharmacyService:
         if cached:
             return cached
         meds = await supabase_http_client.select("medicines", {"order": "medicine_name.asc"})
-        await cache_manager.set("medicines_catalog", meds, ttl_seconds=600)
+        await cache_manager.set("medicines_catalog", meds, ttl_seconds=60)
         return meds
+
+    async def create_medicine(self, payload: MedicineSchema) -> dict:
+        from app.core.cache import cache_manager
+        data = payload.model_dump(exclude_unset=True)
+        if not data.get("medicine_id"):
+            meds = await supabase_http_client.select("medicines")
+            max_num = 0
+            for m in (meds or []):
+                mid = m.get("medicine_id", "")
+                if mid.startswith("MED-"):
+                    try:
+                        num = int(mid.split("-")[1])
+                        if num > max_num:
+                            max_num = num
+                    except (ValueError, IndexError):
+                        pass
+            data["medicine_id"] = f"MED-{max_num + 1:03d}" if max_num > 0 else f"MED-{uuid.uuid4().hex[:6].upper()}"
+
+        res = await supabase_http_client.insert("medicines", data)
+        await cache_manager.delete("medicines_catalog")
+        return res[0] if res else data
 
     async def get_stock(self, hospital_id: Optional[str] = None, provider_id: Optional[str] = None) -> List[dict]:
         import asyncio
