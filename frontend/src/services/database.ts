@@ -771,21 +771,224 @@ export const appointmentService = {
 // BEDS SERVICE
 // =====================
 
+// =====================
+// BEDS SERVICE
+// =====================
+
 export const bedService = {
   async getAll(hospitalId?: string): Promise<{ data: Bed[] | null; error: string | null }> {
     const target = hospitalId || getCurrentHospitalId();
-    return apiClient.get<Bed[]>(`/hospitals/${target}/beds`);
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('beds')
+          .select('*, citizens(*), hospitals(*), hospital_wards(*)')
+          .eq('hospital_id', target)
+          .order('bed_id', { ascending: true });
+
+        if (!error && data) {
+          const mapped: Bed[] = data.map((b: any) => ({
+            bed_id: b.bed_id,
+            hospital_id: b.hospital_id,
+            assigned_to: b.assigned_to,
+            located_at: b.located_at,
+            bed_type: b.bed_type,
+            bed_status: b.bed_status,
+            last_updated_on: b.last_updated_on,
+            assigned_citizen: b.citizens || null,
+            hospital: b.hospitals || null,
+            ward: b.hospital_wards || null,
+          }));
+          return { data: mapped, error: null };
+        }
+      } catch (err: any) {
+        console.warn('Supabase bedService.getAll error, falling back to API:', err);
+      }
+    }
+    const res = await apiClient.get<Bed[]>(`/hospitals/${target}/beds`);
+    if (res.data) {
+      const mapped = res.data.map((b: any) => ({
+        ...b,
+        assigned_citizen: b.assigned_citizen || b.citizens || null,
+        hospital: b.hospital || b.hospitals || null,
+        ward: b.ward || b.hospital_wards || null,
+      }));
+      return { data: mapped, error: null };
+    }
+    return res;
   },
 
   async getAvailable(hospitalId?: string): Promise<{ data: Bed[] | null; error: string | null }> {
-    const target = hospitalId || getCurrentHospitalId();
-    const res = await apiClient.get<Bed[]>(`/hospitals/${target}/beds`);
+    const res = await this.getAll(hospitalId);
     const available = res.data?.filter(b => b.bed_status === 'available') || [];
     return { data: available, error: res.error };
   },
 
   async updateStatus(bedId: string, status: string, citizenId?: string | null): Promise<{ data: Bed | null; error: string | null }> {
-    return apiClient.patch<Bed>(`/hospitals/beds/${bedId}`, { bed_status: status, assigned_to: citizenId });
+    const now = new Date().toISOString();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('beds')
+          .update({ bed_status: status, assigned_to: citizenId || null, last_updated_on: now })
+          .eq('bed_id', bedId)
+          .select('*, citizens(*), hospitals(*), hospital_wards(*)')
+          .single();
+        if (!error && data) {
+          const mapped: Bed = {
+            ...data,
+            assigned_citizen: data.citizens || null,
+            hospital: data.hospitals || null,
+            ward: data.hospital_wards || null,
+          };
+          return { data: mapped, error: null };
+        }
+      } catch (err: any) {
+        console.warn('Supabase bed updateStatus error, falling back to API:', err);
+      }
+    }
+    return apiClient.patch<Bed>(`/hospitals/beds/${bedId}`, { bed_status: status, assigned_to: citizenId || null });
+  },
+
+  async create(bedData: Partial<Bed>): Promise<{ data: Bed | null; error: string | null }> {
+    const targetHospital = bedData.hospital_id || getCurrentHospitalId();
+    const payload = {
+      bed_id: bedData.bed_id?.trim(),
+      hospital_id: targetHospital,
+      located_at: bedData.located_at || null,
+      bed_type: bedData.bed_type || 'general',
+      bed_status: bedData.bed_status || 'available',
+      assigned_to: bedData.assigned_to || null,
+      last_updated_on: new Date().toISOString(),
+    };
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('beds')
+          .insert(payload)
+          .select('*, citizens(*), hospitals(*), hospital_wards(*)')
+          .single();
+        if (!error && data) {
+          const mapped: Bed = {
+            ...data,
+            assigned_citizen: data.citizens || null,
+            hospital: data.hospitals || null,
+            ward: data.hospital_wards || null,
+          };
+          return { data: mapped, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (err: any) {
+        console.warn('Supabase bed create error, falling back to API:', err);
+      }
+    }
+    return apiClient.post<Bed>(`/hospitals/${targetHospital}/beds`, payload);
+  },
+
+  async update(bedId: string, updates: Partial<Bed>): Promise<{ data: Bed | null; error: string | null }> {
+    const payload = {
+      ...updates,
+      last_updated_on: new Date().toISOString(),
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('beds')
+          .update(payload)
+          .eq('bed_id', bedId)
+          .select('*, citizens(*), hospitals(*), hospital_wards(*)')
+          .single();
+        if (!error && data) {
+          const mapped: Bed = {
+            ...data,
+            assigned_citizen: data.citizens || null,
+            hospital: data.hospitals || null,
+            ward: data.hospital_wards || null,
+          };
+          return { data: mapped, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (err: any) {
+        console.warn('Supabase bed update error, falling back to API:', err);
+      }
+    }
+    return apiClient.patch<Bed>(`/hospitals/beds/${bedId}`, payload);
+  },
+
+  async assignCitizen(bedId: string, citizenId: string, status: string = 'occupied'): Promise<{ data: Bed | null; error: string | null }> {
+    const now = new Date().toISOString();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('beds')
+          .update({ assigned_to: citizenId, bed_status: status, last_updated_on: now })
+          .eq('bed_id', bedId)
+          .select('*, citizens(*), hospitals(*), hospital_wards(*)')
+          .single();
+        if (!error && data) {
+          const mapped: Bed = {
+            ...data,
+            assigned_citizen: data.citizens || null,
+            hospital: data.hospitals || null,
+            ward: data.hospital_wards || null,
+          };
+          return { data: mapped, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (err: any) {
+        console.warn('Supabase bed assignCitizen error, using API:', err);
+      }
+    }
+    return apiClient.post<Bed>(`/hospitals/beds/${bedId}/assign`, { citizen_id: citizenId, status });
+  },
+
+  async releaseBed(bedId: string): Promise<{ data: Bed | null; error: string | null }> {
+    const now = new Date().toISOString();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('beds')
+          .update({ assigned_to: null, bed_status: 'available', last_updated_on: now })
+          .eq('bed_id', bedId)
+          .select('*, citizens(*), hospitals(*), hospital_wards(*)')
+          .single();
+        if (!error && data) {
+          const mapped: Bed = {
+            ...data,
+            assigned_citizen: null,
+            hospital: data.hospitals || null,
+            ward: data.hospital_wards || null,
+          };
+          return { data: mapped, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (err: any) {
+        console.warn('Supabase bed releaseBed error, using API:', err);
+      }
+    }
+    return apiClient.post<Bed>(`/hospitals/beds/${bedId}/release`, {});
+  },
+
+  async delete(bedId: string): Promise<{ success: boolean; error: string | null }> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('beds').delete().eq('bed_id', bedId);
+        if (!error) return { success: true, error: null };
+      } catch (err: any) {
+        console.warn('Supabase bed delete error:', err);
+      }
+    }
+    const res = await apiFetch(`/hospitals/beds/${bedId}`, { method: 'DELETE' });
+    return { success: !res.error, error: res.error };
   }
 };
 
@@ -1657,14 +1860,188 @@ export const diseaseSearchService = diseaseService;
 export const medicalEquipmentService = {
   async getAll(hospitalId?: string): Promise<{ data: MedicalEquipment[] | null; error: string | null }> {
     const target = hospitalId || getCurrentHospitalId();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('medical_equipment')
+          .select('*, hospital:hospitals(*)')
+          .eq('hospital_id', target)
+          .order('equipment_id', { ascending: true });
+        if (!error && data) {
+          return { data: data as MedicalEquipment[], error: null };
+        }
+      } catch (e: any) {
+        console.warn('Supabase medicalEquipmentService.getAll error:', e);
+      }
+    }
     return apiClient.get<MedicalEquipment[]>(`/hospitals/${target}/equipment`);
+  },
+
+  async create(equipment: Partial<MedicalEquipment>): Promise<{ data: MedicalEquipment | null; error: string | null }> {
+    const target = equipment.hospital_id || getCurrentHospitalId();
+    const payload = {
+      equipment_id: equipment.equipment_id?.trim() || `EQ-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      hospital_id: target,
+      equipment_name: equipment.equipment_name?.trim() || null,
+      equipment_category: equipment.equipment_category || 'Other',
+      condition_status: equipment.condition_status || 'operational',
+      manufacturer: equipment.manufacturer || null,
+      model_number: equipment.model_number || null,
+      equipment_location: equipment.equipment_location || null,
+      last_serviced_date: equipment.last_serviced_date || null,
+      added_date: equipment.added_date || new Date().toISOString(),
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('medical_equipment')
+          .insert(payload)
+          .select('*, hospital:hospitals(*)')
+          .single();
+        if (!error && data) {
+          return { data: data as MedicalEquipment, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (e: any) {
+        console.warn('Supabase medicalEquipmentService.create error:', e);
+      }
+    }
+    return apiClient.post<MedicalEquipment>(`/hospitals/${target}/equipment`, payload);
+  },
+
+  async update(equipmentUuid: string, updates: Partial<MedicalEquipment>): Promise<{ data: MedicalEquipment | null; error: string | null }> {
+    const payload: any = { ...updates };
+    delete payload.equipment_uuid;
+    delete payload.hospital;
+    delete payload.added_by_staff;
+    delete payload.updated_by_staff;
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('medical_equipment')
+          .update(payload)
+          .eq('equipment_uuid', equipmentUuid)
+          .select('*, hospital:hospitals(*)')
+          .single();
+        if (!error && data) {
+          return { data: data as MedicalEquipment, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (e: any) {
+        console.warn('Supabase medicalEquipmentService.update error:', e);
+      }
+    }
+    return apiClient.patch<MedicalEquipment>(`/hospitals/equipment/${equipmentUuid}`, payload);
+  },
+
+  async delete(equipmentUuid: string): Promise<{ success: boolean; error: string | null }> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('medical_equipment').delete().eq('equipment_uuid', equipmentUuid);
+        if (!error) return { success: true, error: null };
+        if (error) return { success: false, error: error.message };
+      } catch (e: any) {
+        console.warn('Supabase medicalEquipmentService.delete error:', e);
+      }
+    }
+    const res = await apiFetch(`/hospitals/equipment/${equipmentUuid}`, { method: 'DELETE' });
+    return { success: !res.error, error: res.error };
   }
 };
 
 export const ambulanceService = {
   async getAll(hospitalId?: string): Promise<{ data: Ambulance[] | null; error: string | null }> {
     const target = hospitalId || getCurrentHospitalId();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('ambulances')
+          .select('*, hospital:hospitals(*)')
+          .eq('hospital_id', target)
+          .order('ambulance_vehicle_number', { ascending: true });
+        if (!error && data) {
+          return { data: data as Ambulance[], error: null };
+        }
+      } catch (e: any) {
+        console.warn('Supabase ambulanceService.getAll error:', e);
+      }
+    }
     return apiClient.get<Ambulance[]>(`/hospitals/${target}/ambulances`);
+  },
+
+  async create(ambulance: Partial<Ambulance>): Promise<{ data: Ambulance | null; error: string | null }> {
+    const target = ambulance.hospital_id || getCurrentHospitalId();
+    const payload = {
+      ambulance_vehicle_number: ambulance.ambulance_vehicle_number?.trim().toUpperCase(),
+      hospital_id: target,
+      status: ambulance.status || 'available',
+      current_location: ambulance.current_location || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('ambulances')
+          .insert(payload)
+          .select('*, hospital:hospitals(*)')
+          .single();
+        if (!error && data) {
+          return { data: data as Ambulance, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (e: any) {
+        console.warn('Supabase ambulanceService.create error:', e);
+      }
+    }
+    return apiClient.post<Ambulance>(`/hospitals/${target}/ambulances`, payload);
+  },
+
+  async update(vehicleNumber: string, updates: Partial<Ambulance>): Promise<{ data: Ambulance | null; error: string | null }> {
+    const payload = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    delete (payload as any).hospital;
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('ambulances')
+          .update(payload)
+          .eq('ambulance_vehicle_number', vehicleNumber)
+          .select('*, hospital:hospitals(*)')
+          .single();
+        if (!error && data) {
+          return { data: data as Ambulance, error: null };
+        }
+        if (error) {
+          return { data: null, error: error.message };
+        }
+      } catch (e: any) {
+        console.warn('Supabase ambulanceService.update error:', e);
+      }
+    }
+    return apiClient.patch<Ambulance>(`/hospitals/ambulances/${encodeURIComponent(vehicleNumber)}`, payload);
+  },
+
+  async delete(vehicleNumber: string): Promise<{ success: boolean; error: string | null }> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('ambulances').delete().eq('ambulance_vehicle_number', vehicleNumber);
+        if (!error) return { success: true, error: null };
+        if (error) return { success: false, error: error.message };
+      } catch (e: any) {
+        console.warn('Supabase ambulanceService.delete error:', e);
+      }
+    }
+    const res = await apiFetch(`/hospitals/ambulances/${encodeURIComponent(vehicleNumber)}`, { method: 'DELETE' });
+    return { success: !res.error, error: res.error };
   }
 };
 

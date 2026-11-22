@@ -65,10 +65,12 @@ import {
   medicalEquipmentService,
   ambulanceService,
   hospitalSearchService,
+  getCurrentHospitalId,
   type MedicalEquipment,
   type Ambulance,
   type Hospital,
 } from '@/services/database';
+import { useRBAC } from '@/hooks/use-rbac';
 
 // Equipment condition status options (matching database enum)
 const EQUIPMENT_CONDITION_OPTIONS = [
@@ -88,43 +90,75 @@ const AMBULANCE_STATUS_OPTIONS = [
 
 // Equipment categories
 const EQUIPMENT_CATEGORIES = [
+  'Cardiology',
+  'Radiology',
   'Diagnostic',
-  'Therapeutic',
   'Life Support',
   'Monitoring',
   'Surgical',
+  'Emergency',
+  'Neurology',
+  'Orthopedics',
+  'Gynecology',
+  'Neonatology',
+  'Respiratory',
+  'Pathology',
   'Laboratory',
   'Imaging',
   'Sterilization',
+  'Infection Control',
+  'Therapeutic',
   'Other',
 ];
 
 // Category colors
 const CATEGORY_COLORS: Record<string, string> = {
+  'Cardiology': 'bg-rose-50 border-rose-200',
+  'Radiology': 'bg-blue-50 border-blue-200',
   'Diagnostic': 'bg-emerald-50 border-emerald-200',
   'Therapeutic': 'bg-purple-50 border-purple-200',
   'Life Support': 'bg-red-50 border-red-200',
   'Monitoring': 'bg-cyan-50 border-cyan-200',
   'Surgical': 'bg-indigo-50 border-indigo-200',
+  'Emergency': 'bg-amber-50 border-amber-200',
+  'Neurology': 'bg-fuchsia-50 border-fuchsia-200',
+  'Orthopedics': 'bg-orange-50 border-orange-200',
+  'Gynecology': 'bg-pink-50 border-pink-200',
+  'Neonatology': 'bg-sky-50 border-sky-200',
+  'Respiratory': 'bg-teal-50 border-teal-200',
+  'Pathology': 'bg-violet-50 border-violet-200',
   'Laboratory': 'bg-teal-50 border-teal-200',
   'Imaging': 'bg-violet-50 border-violet-200',
   'Sterilization': 'bg-orange-50 border-orange-200',
+  'Infection Control': 'bg-lime-50 border-lime-200',
   'Other': 'bg-slate-50 border-slate-200',
 };
 
 const CATEGORY_TEXT_COLORS: Record<string, string> = {
+  'Cardiology': 'text-rose-900',
+  'Radiology': 'text-blue-900',
   'Diagnostic': 'text-emerald-900',
   'Therapeutic': 'text-purple-800',
   'Life Support': 'text-red-800',
   'Monitoring': 'text-cyan-800',
   'Surgical': 'text-indigo-800',
+  'Emergency': 'text-amber-900',
+  'Neurology': 'text-fuchsia-900',
+  'Orthopedics': 'text-orange-900',
+  'Gynecology': 'text-pink-900',
+  'Neonatology': 'text-sky-900',
+  'Respiratory': 'text-teal-900',
+  'Pathology': 'text-violet-900',
   'Laboratory': 'text-teal-800',
   'Imaging': 'text-violet-800',
   'Sterilization': 'text-orange-800',
+  'Infection Control': 'text-lime-900',
   'Other': 'text-slate-800',
 };
 
 export default function InfrastructureStatus() {
+  const { hospitalId } = useRBAC();
+  const targetHospital = hospitalId || getCurrentHospitalId();
   // State for equipment
   const [equipment, setEquipment] = useState<MedicalEquipment[]>([]);
   const [equipmentStats, setEquipmentStats] = useState({ total: 0, operational: 0, maintenance: 0, outOfService: 0 });
@@ -188,35 +222,35 @@ export default function InfrastructureStatus() {
     current_location: '',
   });
 
-  // Hospital search
-  const [hospitalSearch, setHospitalSearch] = useState('');
-  const [hospitalResults, setHospitalResults] = useState<Hospital[]>([]);
-  const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
-  const [isSearchingHospitals, setIsSearchingHospitals] = useState(false);
+
 
   // Load equipment data
   const loadEquipment = useCallback(async () => {
     setIsLoadingEquipment(true);
     setEquipmentError(null);
+    const effectiveHospital = hospitalId || getCurrentHospitalId();
     
     try {
-      const result = await medicalEquipmentService.getAll();
+      const result = await medicalEquipmentService.getAll(effectiveHospital);
 
       if (result.error) {
         setEquipmentError(result.error);
         toast.error(result.error);
       } else if (result.data) {
-        setEquipment(result.data);
+        const hospitalEquipment = result.data.filter(
+          e => !effectiveHospital || e.hospital_id === effectiveHospital
+        );
+        setEquipment(hospitalEquipment);
         
         // Calculate stats based on actual enum values
         const stats = {
-          total: result.data.length,
-          operational: result.data.filter(e => e.condition_status === 'operational').length,
-          maintenance: result.data.filter(e => 
+          total: hospitalEquipment.length,
+          operational: hospitalEquipment.filter(e => e.condition_status === 'operational').length,
+          maintenance: hospitalEquipment.filter(e => 
             e.condition_status === 'under_maintenance' || 
             e.condition_status === 'needs_service'
           ).length,
-          outOfService: result.data.filter(e => 
+          outOfService: hospitalEquipment.filter(e => 
             e.condition_status === 'out_of_order' || 
             e.condition_status === 'retired'
           ).length,
@@ -230,22 +264,26 @@ export default function InfrastructureStatus() {
     } finally {
       setIsLoadingEquipment(false);
     }
-  }, []);
+  }, [hospitalId]);
 
   // Load ambulance data
   const loadAmbulances = useCallback(async () => {
     setIsLoadingAmbulances(true);
+    const effectiveHospital = hospitalId || getCurrentHospitalId();
     try {
-      const result = await ambulanceService.getAll();
+      const result = await ambulanceService.getAll(effectiveHospital);
 
       if (result.data) {
-        setAmbulances(result.data);
+        const hospitalAmbulances = result.data.filter(
+          a => !effectiveHospital || a.hospital_id === effectiveHospital
+        );
+        setAmbulances(hospitalAmbulances);
         // Calculate stats based on actual enum values
         const stats = {
-          total: result.data.length,
-          available: result.data.filter(a => a.status === 'available').length,
-          outOfService: result.data.filter(a => a.status === 'out_of_service').length,
-          maintenance: result.data.filter(a => a.status === 'under_maintenance').length,
+          total: hospitalAmbulances.length,
+          available: hospitalAmbulances.filter(a => a.status === 'available').length,
+          outOfService: hospitalAmbulances.filter(a => a.status === 'out_of_service').length,
+          maintenance: hospitalAmbulances.filter(a => a.status === 'under_maintenance').length,
         };
         setAmbulanceStats(stats);
       }
@@ -255,7 +293,7 @@ export default function InfrastructureStatus() {
     } finally {
       setIsLoadingAmbulances(false);
     }
-  }, []);
+  }, [hospitalId]);
 
   // Load data on mount
   useEffect(() => {
@@ -263,27 +301,7 @@ export default function InfrastructureStatus() {
     loadAmbulances();
   }, [loadEquipment, loadAmbulances]);
 
-  // Hospital search
-  useEffect(() => {
-    const searchHospitals = async () => {
-      if (!hospitalSearch.trim()) {
-        setHospitalResults([]);
-        return;
-      }
-      setIsSearchingHospitals(true);
-      try {
-        const { data, error } = await hospitalSearchService.search(hospitalSearch);
-        if (!error && data) {
-          setHospitalResults(data);
-        }
-      } catch (err) {
-        console.error('Hospital search error:', err);
-      }
-      setIsSearchingHospitals(false);
-    };
-    const timer = setTimeout(searchHospitals, 300);
-    return () => clearTimeout(timer);
-  }, [hospitalSearch]);
+
 
   // Filter equipment based on search, status filter, and category filter
   const filteredEquipment = React.useMemo(() => {
@@ -383,25 +401,21 @@ export default function InfrastructureStatus() {
       equipment_name: '',
       equipment_category: '',
       condition_status: 'operational',
-      hospital_id: '',
+      hospital_id: targetHospital,
       equipment_location: '',
       manufacturer: '',
       model_number: '',
       last_serviced_date: '',
     });
-    setSelectedHospital(null);
-    setHospitalSearch('');
   };
 
   const resetAmbulanceForm = () => {
     setAmbulanceForm({
       ambulance_vehicle_number: '',
-      hospital_id: '',
+      hospital_id: targetHospital,
       status: 'available',
       current_location: '',
     });
-    setSelectedHospital(null);
-    setHospitalSearch('');
   };
 
   // Handle add equipment
@@ -416,9 +430,9 @@ export default function InfrastructureStatus() {
       const { data, error } = await medicalEquipmentService.create({
         equipment_id: equipmentForm.equipment_id || null,
         equipment_name: equipmentForm.equipment_name,
-        equipment_category: equipmentForm.equipment_category || null,
+        equipment_category: equipmentForm.equipment_category || 'Other',
         condition_status: equipmentForm.condition_status,
-        hospital_id: selectedHospital?.hospital_id || null,
+        hospital_id: targetHospital,
         equipment_location: equipmentForm.equipment_location || null,
         manufacturer: equipmentForm.manufacturer || null,
         model_number: equipmentForm.model_number || null,
@@ -453,9 +467,9 @@ export default function InfrastructureStatus() {
       const { data, error } = await medicalEquipmentService.update(selectedEquipment.equipment_uuid, {
         equipment_id: equipmentForm.equipment_id || null,
         equipment_name: equipmentForm.equipment_name,
-        equipment_category: equipmentForm.equipment_category || null,
+        equipment_category: equipmentForm.equipment_category || 'Other',
         condition_status: equipmentForm.condition_status,
-        hospital_id: selectedHospital?.hospital_id || null,
+        hospital_id: targetHospital,
         equipment_location: equipmentForm.equipment_location || null,
         manufacturer: equipmentForm.manufacturer || null,
         model_number: equipmentForm.model_number || null,
@@ -511,7 +525,7 @@ export default function InfrastructureStatus() {
     try {
       const { data, error } = await ambulanceService.create({
         ambulance_vehicle_number: ambulanceForm.ambulance_vehicle_number,
-        hospital_id: selectedHospital?.hospital_id || null,
+        hospital_id: targetHospital,
         status: ambulanceForm.status,
         current_location: ambulanceForm.current_location || null,
       });
@@ -542,7 +556,7 @@ export default function InfrastructureStatus() {
     setIsSubmitting(true);
     try {
       const { data, error } = await ambulanceService.update(selectedAmbulance.ambulance_vehicle_number, {
-        hospital_id: selectedHospital?.hospital_id || null,
+        hospital_id: targetHospital,
         status: ambulanceForm.status,
         current_location: ambulanceForm.current_location || null,
       });
@@ -588,20 +602,23 @@ export default function InfrastructureStatus() {
   // Open edit equipment dialog
   const openEditEquipmentDialog = (eq: MedicalEquipment) => {
     setSelectedEquipment(eq);
+    let formattedDate = '';
+    if (eq.last_serviced_date) {
+      formattedDate = eq.last_serviced_date.includes('T')
+        ? eq.last_serviced_date.split('T')[0]
+        : eq.last_serviced_date;
+    }
     setEquipmentForm({
       equipment_id: eq.equipment_id || '',
       equipment_name: eq.equipment_name || '',
-      equipment_category: eq.equipment_category || '',
+      equipment_category: eq.equipment_category || 'Other',
       condition_status: eq.condition_status || 'operational',
-      hospital_id: eq.hospital_id || '',
+      hospital_id: eq.hospital_id || targetHospital,
       equipment_location: eq.equipment_location || '',
       manufacturer: eq.manufacturer || '',
       model_number: eq.model_number || '',
-      last_serviced_date: eq.last_serviced_date || '',
+      last_serviced_date: formattedDate,
     });
-    if (eq.hospital) {
-      setSelectedHospital(eq.hospital);
-    }
     setShowEditEquipmentDialog(true);
   };
 
@@ -610,13 +627,10 @@ export default function InfrastructureStatus() {
     setSelectedAmbulance(amb);
     setAmbulanceForm({
       ambulance_vehicle_number: amb.ambulance_vehicle_number,
-      hospital_id: amb.hospital_id || '',
+      hospital_id: amb.hospital_id || targetHospital,
       status: amb.status || 'available',
       current_location: amb.current_location || '',
     });
-    if (amb.hospital) {
-      setSelectedHospital(amb.hospital);
-    }
     setShowEditAmbulanceDialog(true);
   };
 
@@ -666,65 +680,7 @@ export default function InfrastructureStatus() {
     return found?.color || 'bg-slate-100 text-slate-700';
   };
 
-  // Hospital selector component
-  const HospitalSelector = () => (
-    <div className="space-y-2">
-      <Label>Hospital</Label>
-      <div className="relative">
-        <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <Input
-          placeholder="Search hospital..."
-          value={selectedHospital ? selectedHospital.name || '' : hospitalSearch}
-          onChange={(e) => {
-            setHospitalSearch(e.target.value);
-            setSelectedHospital(null);
-          }}
-          className="pl-10"
-          disabled={!!selectedHospital}
-        />
-        {isSearchingHospitals && (
-          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-        )}
-      </div>
-      {hospitalResults.length > 0 && !selectedHospital && (
-        <div className="border rounded-lg divide-y max-h-40 overflow-auto bg-white shadow-lg z-50 relative">
-          {hospitalResults.map((hospital) => (
-            <button
-              key={hospital.hospital_id}
-              className="w-full flex items-center gap-3 p-2 hover:bg-slate-50 text-left"
-              onClick={() => {
-                setSelectedHospital(hospital);
-                setHospitalSearch('');
-              }}
-            >
-              <Building2 className="h-4 w-4 text-slate-400" />
-              <div>
-                <p className="font-medium text-sm">{hospital.name}</p>
-                <p className="text-xs text-slate-500">{hospital.hospital_id}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-      {selectedHospital && (
-        <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg border">
-          <Building2 className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">{selectedHospital.name}</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ml-auto h-6 px-2"
-            onClick={() => {
-              setSelectedHospital(null);
-              setHospitalSearch('');
-            }}
-          >
-            Change
-          </Button>
-        </div>
-      )}
-    </div>
-  );
+
 
   return (
     <div className="space-y-4">
@@ -1270,7 +1226,7 @@ export default function InfrastructureStatus() {
 
       {/* Add Equipment Dialog */}
       <Dialog open={showAddEquipmentDialog} onOpenChange={setShowAddEquipmentDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-lg max-w-full">
           <DialogHeader>
             <DialogTitle>Add New Equipment</DialogTitle>
             <DialogDescription>Add new medical equipment to the system.</DialogDescription>
@@ -1305,6 +1261,9 @@ export default function InfrastructureStatus() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
+                    {equipmentForm.equipment_category && !EQUIPMENT_CATEGORIES.includes(equipmentForm.equipment_category) && (
+                      <SelectItem value={equipmentForm.equipment_category}>{equipmentForm.equipment_category}</SelectItem>
+                    )}
                     {EQUIPMENT_CATEGORIES.map((cat) => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
@@ -1328,7 +1287,6 @@ export default function InfrastructureStatus() {
                 </Select>
               </div>
             </div>
-            <HospitalSelector />
             <div className="space-y-2">
               <Label>Location</Label>
               <Input
@@ -1376,7 +1334,7 @@ export default function InfrastructureStatus() {
 
       {/* Edit Equipment Dialog */}
       <Dialog open={showEditEquipmentDialog} onOpenChange={setShowEditEquipmentDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-lg max-w-full">
           <DialogHeader>
             <DialogTitle>Edit Equipment</DialogTitle>
             <DialogDescription>Update equipment details.</DialogDescription>
@@ -1411,6 +1369,9 @@ export default function InfrastructureStatus() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
+                    {equipmentForm.equipment_category && !EQUIPMENT_CATEGORIES.includes(equipmentForm.equipment_category) && (
+                      <SelectItem value={equipmentForm.equipment_category}>{equipmentForm.equipment_category}</SelectItem>
+                    )}
                     {EQUIPMENT_CATEGORIES.map((cat) => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
@@ -1434,7 +1395,6 @@ export default function InfrastructureStatus() {
                 </Select>
               </div>
             </div>
-            <HospitalSelector />
             <div className="space-y-2">
               <Label>Location</Label>
               <Input
@@ -1482,7 +1442,7 @@ export default function InfrastructureStatus() {
 
       {/* Add Ambulance Dialog */}
       <Dialog open={showAddAmbulanceDialog} onOpenChange={setShowAddAmbulanceDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md max-w-full">
           <DialogHeader>
             <DialogTitle>Add New Ambulance</DialogTitle>
             <DialogDescription>Add new ambulance to the system.</DialogDescription>
@@ -1496,7 +1456,6 @@ export default function InfrastructureStatus() {
                 onChange={(e) => setAmbulanceForm(prev => ({ ...prev, ambulance_vehicle_number: e.target.value }))}
               />
             </div>
-            <HospitalSelector />
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
@@ -1534,7 +1493,7 @@ export default function InfrastructureStatus() {
 
       {/* Edit Ambulance Dialog */}
       <Dialog open={showEditAmbulanceDialog} onOpenChange={setShowEditAmbulanceDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md max-w-full">
           <DialogHeader>
             <DialogTitle>Edit Ambulance</DialogTitle>
             <DialogDescription>Update ambulance details.</DialogDescription>
@@ -1548,7 +1507,6 @@ export default function InfrastructureStatus() {
                 className="bg-slate-50"
               />
             </div>
-            <HospitalSelector />
             <div className="space-y-2">
               <Label>Status</Label>
               <Select

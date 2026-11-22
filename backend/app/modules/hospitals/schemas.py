@@ -139,6 +139,25 @@ class BedSchema(BaseModel):
     bed_type: Optional[str] = None
     bed_status: Optional[str] = None
     last_updated_on: Optional[str] = None
+    assigned_citizen: Optional[dict] = None
+    hospital: Optional[dict] = None
+    ward: Optional[dict] = None
+
+
+class BedCreateSchema(BaseModel):
+    bed_id: str
+    hospital_id: Optional[str] = None
+    located_at: Optional[str] = None
+    bed_type: Optional[str] = "general"
+    bed_status: Optional[str] = "available"
+
+
+class BedUpdateSchema(BaseModel):
+    bed_type: Optional[str] = None
+    bed_status: Optional[str] = None
+    hospital_id: Optional[str] = None
+    located_at: Optional[str] = None
+    assigned_to: Optional[str] = None
 
 
 class EquipmentSchema(BaseModel):
@@ -148,6 +167,36 @@ class EquipmentSchema(BaseModel):
     equipment_name: Optional[str] = None
     equipment_category: Optional[str] = None
     condition_status: Optional[str] = None
+    last_serviced_date: Optional[str] = None
+    added_date: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model_number: Optional[str] = None
+    equipment_location: Optional[str] = None
+    hospital: Optional[dict] = None
+
+
+class EquipmentCreateSchema(BaseModel):
+    equipment_id: Optional[str] = None
+    equipment_name: str
+    equipment_category: Optional[str] = None
+    condition_status: Optional[str] = "operational"
+    hospital_id: Optional[str] = None
+    equipment_location: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model_number: Optional[str] = None
+    last_serviced_date: Optional[str] = None
+
+
+class EquipmentUpdateSchema(BaseModel):
+    equipment_id: Optional[str] = None
+    equipment_name: Optional[str] = None
+    equipment_category: Optional[str] = None
+    condition_status: Optional[str] = None
+    hospital_id: Optional[str] = None
+    equipment_location: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model_number: Optional[str] = None
+    last_serviced_date: Optional[str] = None
 
 
 class AmbulanceSchema(BaseModel):
@@ -155,3 +204,5 @@ class AmbulanceSchema(BaseModel):
     hospital_id: Optional[str] = None
     status: Optional[str] = None
     current_location: Optional[str] = None
+    hospital: Optional[dict] = None
+

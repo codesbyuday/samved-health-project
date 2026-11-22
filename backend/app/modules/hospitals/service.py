@@ -97,15 +97,99 @@ class HospitalService:
         cached = await cache_manager.get(cache_key)
         if cached is not None:
             return cached
+
         beds = await supabase_http_client.select("beds", {"hospital_id": f"eq.{hospital_id}"})
-        await cache_manager.set(cache_key, beds, ttl_seconds=120)
+        if not beds:
+            return []
+
+        # Enrich beds with citizen, hospital, and ward details
+        citizen_ids = list({b.get("assigned_to") for b in beds if b.get("assigned_to")})
+        citizens_map = {}
+        if citizen_ids:
+            try:
+                # Query citizens
+                for cid in citizen_ids:
+                    c_rows = await supabase_http_client.select("citizens", {"citizen_id": f"eq.{cid}"})
+                    if c_rows:
+                        citizens_map[cid] = c_rows[0]
+            except Exception as e:
+                logger.warning(f"Failed to fetch citizens for beds: {e}")
+
+        ward_ids = list({b.get("located_at") for b in beds if b.get("located_at")})
+        wards_map = {}
+        if ward_ids:
+            try:
+                for wid in ward_ids:
+                    w_rows = await supabase_http_client.select("hospital_wards", {"hospital_ward_id": f"eq.{wid}"})
+                    if w_rows:
+                        wards_map[wid] = w_rows[0]
+            except Exception as e:
+                logger.warning(f"Failed to fetch wards for beds: {e}")
+
+        h_rows = await supabase_http_client.select("hospitals", {"hospital_id": f"eq.{hospital_id}"})
+        hosp_obj = h_rows[0] if h_rows else None
+
+        for b in beds:
+            b["assigned_citizen"] = citizens_map.get(b.get("assigned_to"))
+            b["hospital"] = hosp_obj
+            b["ward"] = wards_map.get(b.get("located_at"))
+
+        await cache_manager.set(cache_key, beds, ttl_seconds=60)
         return beds
+
+    async def create_bed(self, hospital_id: str, payload: dict) -> dict:
+        from app.core.cache import cache_manager
+        from datetime import datetime
+        bed_data = {
+            "bed_id": payload["bed_id"],
+            "hospital_id": hospital_id,
+            "located_at": payload.get("located_at") or None,
+            "bed_type": payload.get("bed_type") or "general",
+            "bed_status": payload.get("bed_status") or "available",
+            "assigned_to": payload.get("assigned_to") or None,
+            "last_updated_on": datetime.now().isoformat(),
+        }
+        res = await supabase_http_client.insert("beds", bed_data)
+        await cache_manager.clear_prefix("beds_list")
+        return res[0] if res else bed_data
 
     async def update_bed(self, bed_id: str, updates: dict) -> dict:
         from app.core.cache import cache_manager
-        res = await supabase_http_client.update("beds", {"bed_id": f"eq.{bed_id}"}, updates)
+        from datetime import datetime
+        payload = {**updates, "last_updated_on": datetime.now().isoformat()}
+        res = await supabase_http_client.update("beds", {"bed_id": f"eq.{bed_id}"}, payload)
         await cache_manager.clear_prefix("beds_list")
-        return res[0] if res else updates
+        return res[0] if res else payload
+
+    async def assign_bed(self, bed_id: str, citizen_id: str, status: str = "occupied") -> dict:
+        from app.core.cache import cache_manager
+        from datetime import datetime
+        payload = {
+            "assigned_to": citizen_id,
+            "bed_status": status,
+            "last_updated_on": datetime.now().isoformat(),
+        }
+        res = await supabase_http_client.update("beds", {"bed_id": f"eq.{bed_id}"}, payload)
+        await cache_manager.clear_prefix("beds_list")
+        return res[0] if res else payload
+
+    async def release_bed(self, bed_id: str) -> dict:
+        from app.core.cache import cache_manager
+        from datetime import datetime
+        payload = {
+            "assigned_to": None,
+            "bed_status": "available",
+            "last_updated_on": datetime.now().isoformat(),
+        }
+        res = await supabase_http_client.update("beds", {"bed_id": f"eq.{bed_id}"}, payload)
+        await cache_manager.clear_prefix("beds_list")
+        return res[0] if res else payload
+
+    async def delete_bed(self, bed_id: str) -> bool:
+        from app.core.cache import cache_manager
+        await supabase_http_client.delete("beds", {"bed_id": f"eq.{bed_id}"})
+        await cache_manager.clear_prefix("beds_list")
+        return True
 
     async def get_equipment(self, hospital_id: str) -> List[dict]:
         from app.core.cache import cache_manager
@@ -114,8 +198,42 @@ class HospitalService:
         if cached is not None:
             return cached
         equipment = await supabase_http_client.select("medical_equipment", {"hospital_id": f"eq.{hospital_id}"})
-        await cache_manager.set(cache_key, equipment, ttl_seconds=300)
+        await cache_manager.set(cache_key, equipment, ttl_seconds=60)
         return equipment
+
+    async def create_equipment(self, hospital_id: str, payload: dict) -> dict:
+        import uuid
+        from app.core.cache import cache_manager
+        from datetime import date
+        equip_uuid = payload.get("equipment_uuid") or f"EQ-{hospital_id}-{uuid.uuid4().hex[:6].upper()}"
+        equip_data = {
+            "equipment_uuid": equip_uuid,
+            "equipment_id": payload.get("equipment_id") or None,
+            "hospital_id": hospital_id,
+            "equipment_name": payload.get("equipment_name"),
+            "equipment_category": payload.get("equipment_category") or None,
+            "condition_status": payload.get("condition_status") or "operational",
+            "last_serviced_date": payload.get("last_serviced_date") or None,
+            "added_date": payload.get("added_date") or date.today().isoformat(),
+            "manufacturer": payload.get("manufacturer") or None,
+            "model_number": payload.get("model_number") or None,
+            "equipment_location": payload.get("equipment_location") or None,
+        }
+        res = await supabase_http_client.insert("medical_equipment", equip_data)
+        await cache_manager.clear_prefix("equipment_list")
+        return res[0] if res else equip_data
+
+    async def update_equipment(self, equipment_uuid: str, updates: dict) -> dict:
+        from app.core.cache import cache_manager
+        res = await supabase_http_client.update("medical_equipment", {"equipment_uuid": f"eq.{equipment_uuid}"}, updates)
+        await cache_manager.clear_prefix("equipment_list")
+        return res[0] if res else updates
+
+    async def delete_equipment(self, equipment_uuid: str) -> bool:
+        from app.core.cache import cache_manager
+        await supabase_http_client.delete("medical_equipment", {"equipment_uuid": f"eq.{equipment_uuid}"})
+        await cache_manager.clear_prefix("equipment_list")
+        return True
 
     async def get_ambulances(self, hospital_id: str) -> List[dict]:
         from app.core.cache import cache_manager
@@ -124,8 +242,36 @@ class HospitalService:
         if cached is not None:
             return cached
         ambulances = await supabase_http_client.select("ambulances", {"hospital_id": f"eq.{hospital_id}"})
-        await cache_manager.set(cache_key, ambulances, ttl_seconds=300)
+        await cache_manager.set(cache_key, ambulances, ttl_seconds=60)
         return ambulances
+
+    async def create_ambulance(self, hospital_id: str, payload: dict) -> dict:
+        from app.core.cache import cache_manager
+        from datetime import datetime
+        amb_data = {
+            "ambulance_vehicle_number": payload["ambulance_vehicle_number"].strip().upper(),
+            "hospital_id": hospital_id,
+            "status": payload.get("status") or "available",
+            "current_location": payload.get("current_location") or None,
+            "updated_at": datetime.now().isoformat(),
+        }
+        res = await supabase_http_client.insert("ambulances", amb_data)
+        await cache_manager.clear_prefix("ambulances_list")
+        return res[0] if res else amb_data
+
+    async def update_ambulance(self, vehicle_number: str, updates: dict) -> dict:
+        from app.core.cache import cache_manager
+        from datetime import datetime
+        payload = {**updates, "updated_at": datetime.now().isoformat()}
+        res = await supabase_http_client.update("ambulances", {"ambulance_vehicle_number": f"eq.{vehicle_number}"}, payload)
+        await cache_manager.clear_prefix("ambulances_list")
+        return res[0] if res else payload
+
+    async def delete_ambulance(self, vehicle_number: str) -> bool:
+        from app.core.cache import cache_manager
+        await supabase_http_client.delete("ambulances", {"ambulance_vehicle_number": f"eq.{vehicle_number}"})
+        await cache_manager.clear_prefix("ambulances_list")
+        return True
 
     async def get_dashboard_overview(self, hospital_id: str) -> dict:
         import asyncio

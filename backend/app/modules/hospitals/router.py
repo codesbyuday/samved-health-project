@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query, status
 from typing import List, Optional
 from app.modules.hospitals.schemas import (
-    HospitalSchema, DoctorSchema, BedSchema, EquipmentSchema, AmbulanceSchema,
+    HospitalSchema, DoctorSchema, BedSchema, BedCreateSchema, BedUpdateSchema,
+    EquipmentSchema, EquipmentCreateSchema, EquipmentUpdateSchema, AmbulanceSchema,
     HospitalRegistrationCreateSchema, HospitalStatusUpdateSchema, HospitalDocumentSchema,
     HospitalDocumentCreateSchema, StaffCreateSchema, StaffUpdateSchema, StaffResponseSchema,
     GenerateCredentialsSchema
@@ -141,14 +142,56 @@ async def get_hospital_beds(hospital_id: str):
     return await hospital_service.get_beds(hospital_id)
 
 
+@router.post("/{hospital_id}/beds", response_model=BedSchema)
+async def create_hospital_bed(hospital_id: str, payload: BedCreateSchema):
+    return await hospital_service.create_bed(hospital_id, payload.model_dump())
+
+
 @router.patch("/beds/{bed_id}", response_model=BedSchema)
 async def update_bed_status(bed_id: str, updates: dict):
     return await hospital_service.update_bed(bed_id, updates)
 
 
+@router.post("/beds/{bed_id}/assign")
+async def assign_bed(bed_id: str, payload: dict):
+    citizen_id = payload.get("citizen_id")
+    status = payload.get("status") or "occupied"
+    if not citizen_id:
+        raise HTTPException(status_code=400, detail="citizen_id is required")
+    return await hospital_service.assign_bed(bed_id, citizen_id, status)
+
+
+@router.post("/beds/{bed_id}/release")
+async def release_bed(bed_id: str):
+    return await hospital_service.release_bed(bed_id)
+
+
+@router.delete("/beds/{bed_id}")
+async def delete_bed(bed_id: str):
+    await hospital_service.delete_bed(bed_id)
+    return {"status": "deleted", "bed_id": bed_id}
+
+
 @router.get("/{hospital_id}/equipment", response_model=List[EquipmentSchema])
 async def get_hospital_equipment(hospital_id: str):
     return await hospital_service.get_equipment(hospital_id)
+
+
+@router.post("/{hospital_id}/equipment", response_model=EquipmentSchema)
+async def create_hospital_equipment(hospital_id: str, payload: EquipmentCreateSchema):
+    return await hospital_service.create_equipment(hospital_id, payload.model_dump())
+
+
+@router.patch("/equipment/{equipment_uuid}", response_model=EquipmentSchema)
+async def update_hospital_equipment(equipment_uuid: str, payload: EquipmentUpdateSchema):
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    return await hospital_service.update_equipment(equipment_uuid, updates)
+
+
+@router.delete("/equipment/{equipment_uuid}")
+async def delete_hospital_equipment(equipment_uuid: str):
+    await hospital_service.delete_equipment(equipment_uuid)
+    return {"status": "deleted", "equipment_uuid": equipment_uuid}
 
 
 @router.get("/{hospital_id}/dashboard-overview")
@@ -159,6 +202,22 @@ async def get_hospital_dashboard_overview(hospital_id: str):
 @router.get("/{hospital_id}/ambulances", response_model=List[AmbulanceSchema])
 async def get_hospital_ambulances(hospital_id: str):
     return await hospital_service.get_ambulances(hospital_id)
+
+
+@router.post("/{hospital_id}/ambulances", response_model=AmbulanceSchema)
+async def create_hospital_ambulance(hospital_id: str, payload: dict):
+    return await hospital_service.create_ambulance(hospital_id, payload)
+
+
+@router.patch("/ambulances/{vehicle_number}", response_model=AmbulanceSchema)
+async def update_hospital_ambulance(vehicle_number: str, payload: dict):
+    return await hospital_service.update_ambulance(vehicle_number, payload)
+
+
+@router.delete("/ambulances/{vehicle_number}")
+async def delete_hospital_ambulance(vehicle_number: str):
+    await hospital_service.delete_ambulance(vehicle_number)
+    return {"status": "deleted", "vehicle_number": vehicle_number}
 
 
 @router.get("/{hospital_id}/staff", response_model=List[StaffResponseSchema])
